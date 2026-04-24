@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GiftFlow Studio</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#overview" aria-label="GiftFlow Studio home">
+        <span class="brand-mark">GF</span>
+        <span>GiftFlow</span>
+      </a>
+      <nav class="nav" aria-label="Primary">
+        <a href="#guide">Guide</a>
+        <a href="#sequence">Sequence</a>
+        <a href="#prospects">Prospects</a>
+        <a href="#automation">Automation</a>
+      </nav>
+      <button class="button button-dark" id="saveButton" type="button">Save</button>
+    </header>
+
+    <main>
+      <section class="hero" id="overview">
+        <div class="hero-copy">
+          <p class="launch-note">Private automation studio for prospect gifting</p>
+          <h1>Send. Follow up. Book meetings. All in one place.</h1>
+          <p class="lede">
+            One workspace for prospect lists, Amazon gift choices, gift-message approvals, and deduped order queues.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-dark" href="#sequence">Build sequence</a>
+            <button class="button button-light" id="heroRunButton" type="button">Process today</button>
+          </div>
+          <div class="hero-proof" aria-label="Workflow stats">
+            <span>Manual review before live sends</span>
+            <span>Deduped order queue</span>
+            <span>Team-owned prospect lists</span>
+          </div>
+        </div>
+
+        <aside class="phone-scene" aria-label="Campaign overview preview">
+          <div class="floating-card floating-card-one">
+            <span>Gift 01</span>
+            <strong>Coffee box</strong>
+          </div>
+          <div class="phone-shell">
+            <div class="phone-header">
+              <span class="camera-dot"></span>
+              <span>Today</span>
+            </div>
+            <div class="metric-stack">
+              <div>
+                <span class="metric-label">Ready prospects</span>
+                <strong id="readyMetric">0</strong>
+              </div>
+              <div>
+                <span class="metric-label">Due gifts</span>
+                <strong id="dueMetric">0</strong>
+              </div>
+              <div>
+                <span class="metric-label">Queued orders</span>
+                <strong id="queuedMetric">0</strong>
+              </div>
+            </div>
+            <div class="route-card">
+              <span class="route-dot"></span>
+              <div>
+                <strong id="phoneCampaignName">Founder intro sequence</strong>
+                <p id="phoneCampaignGoal">Turn warm prospects into booked calls with thoughtful gifts.</p>
+              </div>
+            </div>
+            <div class="mini-list" id="phoneSteps"></div>
+          </div>
+          <div class="floating-card floating-card-two">
+            <span>Message</span>
+            <strong>Hi {{firstName}}</strong>
+          </div>
+        </aside>
+      </section>
+
+      <section class="section slides-band" id="guide" aria-label="Instructional slides">
+        <div class="slides-heading">
+          <div>
+            <p class="eyebrow">Quick start</p>
+            <h2>Four simple steps before the queue runs.</h2>
+          </div>
+          <div class="slide-controls" aria-label="Slide controls">
+            <button class="icon-button" id="slidePrevButton" type="button" aria-label="Previous slide">‹</button>
+            <span id="slideCounter">1 / 4</span>
+            <button class="icon-button" id="slideNextButton" type="button" aria-label="Next slide">›</button>
+          </div>
+        </div>
+        <div class="slides-frame">
+          <article class="instruction-slide is-active" data-slide="0">
+            <span>01</span>
+            <strong>Set the campaign.</strong>
+            <p>Name the campaign, add the owner, set the start date, and write the outcome your team is aiming for.</p>
+          </article>
+          <article class="instruction-slide" data-slide="1">
+            <span>02</span>
+            <strong>Add prospects.</strong>
+            <p>Add people one by one or paste a CSV, then mark each prospect ready once the shipping address is complete.</p>
+          </article>
+          <article class="instruction-slide" data-slide="2">
+            <span>03</span>
+            <strong>Build the gift sequence.</strong>
+            <p>Add as many gifts as the campaign needs, choose send dates, and personalize the Amazon gift message with tokens like {{firstName}}.</p>
+          </article>
+          <article class="instruction-slide" data-slide="3">
+            <span>04</span>
+            <strong>Confirm, then process.</strong>
+            <p>Confirm the sequence to lock the gifts and messages, then process due gifts when you are ready to create order records.</p>
+          </article>
+        </div>
+        <div class="slide-dots" id="slideDots" aria-label="Go to slide"></div>
+      </section>
+
+      <section class="section reason-band" aria-label="Why this workflow exists">
+        <div>
+          <p class="eyebrow">Because gift campaigns should not be this manual</p>
+          <h2>Keep the personal touch. Remove the repetitive work.</h2>
+        </div>
+        <div class="reason-grid">
+          <article>
+            <span>01</span>
+            <strong>One place for every send</strong>
+            <p>Campaign setup, recipient data, gift choices, and approval status stay together.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <strong>Control before automation</strong>
+            <p>Every message and gift sequence must be confirmed before the queue can run.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <strong>No repeat gifts</strong>
+            <p>The processor checks recipient and step history before creating a new order record.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section overview-grid" aria-label="Campaign status">
+        <article class="stat-tile">
+          <span>Campaign</span>
+          <strong id="campaignStatus">Draft</strong>
+          <p id="campaignStatusDetail">Confirm your sequence before running automation.</p>
+        </article>
+        <article class="stat-tile">
+          <span>Amazon mode</span>
+          <strong id="amazonModeStatus">Queue only</strong>
+          <p>Queue gifts for review now, connect Amazon Business credentials later.</p>
+        </article>
+        <article class="stat-tile">
+          <span>Next send</span>
+          <strong id="nextSendStatus">Not scheduled</strong>
+          <p id="nextSendDetail">Add send dates to your gift sequence.</p>
+        </article>
+      </section>
+
+      <section class="section workspace">
+        <aside class="side-rail" aria-label="Workflow">
+          <a href="#campaign">01 Campaign</a>
+          <a href="#sequence">02 Gifts</a>
+          <a href="#prospects">03 Prospects</a>
+          <a href="#automation">04 Automate</a>
+        </aside>
+
+        <div class="panels">
+          <section class="panel" id="campaign">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Campaign setup</p>
+                <h2>Name the motion and assign ownership.</h2>
+              </div>
+              <button class="icon-button" id="resetDemoButton" type="button" title="Load sample campaign" aria-label="Load sample campaign">↻</button>
+            </div>
+            <div class="form-grid two-col">
+              <label>
+                <span>Campaign name</span>
+                <input id="campaignName" type="text" autocomplete="off">
+              </label>
+              <label>
+                <span>Campaign owner</span>
+                <input id="campaignOwner" type="text" autocomplete="off">
+              </label>
+              <label>
+                <span>Start date</span>
+                <input id="campaignStartDate" type="date">
+              </label>
+              <label>
+                <span>Target filter</span>
+                <input id="targetFilter" type="text" placeholder="Series A founders, Denver prospects">
+              </label>
+              <label class="full-span">
+                <span>Goal</span>
+                <textarea id="campaignGoal" rows="3"></textarea>
+              </label>
+            </div>
+          </section>
+
+          <section class="panel" id="sequence">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Gift sequence</p>
+                <h2>Choose the gifts and write the Amazon gift messages.</h2>
+              </div>
+              <button class="button button-light" id="addStepButton" type="button">Add gift</button>
+            </div>
+            <div class="sequence-tools">
+              <button class="button button-dark" id="confirmSequenceButton" type="button">Confirm sequence</button>
+              <p id="sequenceConfirmation">Any gift edit requires a fresh confirmation before orders can run.</p>
+            </div>
+            <div class="step-list" id="stepList"></div>
+            <div class="sequence-footer">
+              <div>
+                <strong id="giftCountStatus">0 gifts in this sequence</strong>
+                <p>Each gift can have its own date, Amazon item, message, and follow-up copy.</p>
+              </div>
+              <button class="button button-light" id="addStepFooterButton" type="button">Add another gift</button>
+            </div>
+          </section>
+
+          <section class="panel" id="prospects">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Prospects</p>
+                <h2>Add recipients with complete shipping details.</h2>
+              </div>
+              <div class="button-row">
+                <button class="button button-light" id="importButton" type="button">Import CSV</button>
+                <button class="button button-light" id="addRecipientButton" type="button">Add prospect</button>
+              </div>
+            </div>
+            <textarea id="csvInput" class="csv-input" rows="4" placeholder="name,email,company,street,city,state,zip"></textarea>
+            <div class="prospect-summary">
+              <div>
+                <strong id="prospectCountStatus">0 prospects</strong>
+                <p>Mark a prospect ready once their name and shipping address are complete.</p>
+              </div>
+              <span id="readyProspectStatus">0 ready</span>
+            </div>
+            <div class="recipient-list" id="recipientRows"></div>
+          </section>
+
+          <section class="panel" id="automation">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Automation</p>
+                <h2>Run the gift queue when your sequence is approved.</h2>
+              </div>
+              <button class="button button-dark" id="runAutomationButton" type="button">Process due gifts</button>
+            </div>
+            <div class="form-grid two-col compact">
+              <label>
+                <span>Run date</span>
+                <input id="runDate" type="date">
+              </label>
+              <label>
+                <span>Amazon mode</span>
+                <select id="amazonMode">
+                  <option value="queue-only">Queue only</option>
+                  <option value="sandbox">Sandbox simulation</option>
+                  <option value="amazon-business-api">Amazon Business API ready</option>
+                </select>
+              </label>
+              <label>
+                <span>Marketplace</span>
+                <input id="amazonMarketplace" type="text" placeholder="ATVPDKIKX0DER">
+              </label>
+              <label>
+                <span class="label-with-help">Client ID <a href="#amazonCredentialGuide" class="need-help-link">Need help?</a></span>
+                <input id="amazonClientId" type="password" autocomplete="off">
+              </label>
+              <label>
+                <span class="label-with-help">Refresh token <a href="#amazonCredentialGuide" class="need-help-link">Need help?</a></span>
+                <input id="amazonRefreshToken" type="password" autocomplete="off">
+              </label>
+              <label>
+                <span>Endpoint</span>
+                <input id="amazonEndpoint" type="url" placeholder="https://api.business.amazon.com">
+              </label>
+              <label class="full-span">
+                <span>Shipping defaults</span>
+                <textarea id="shippingDefaults" rows="3" placeholder="Gift wrap, business account, delivery instructions"></textarea>
+              </label>
+            </div>
+
+            <details class="credential-guide" id="amazonCredentialGuide" hidden>
+              <summary>Amazon credential guide</summary>
+              <div class="credential-guide-content">
+                <article>
+                  <span>01</span>
+                  <strong>Register for Amazon Business API access.</strong>
+                  <p>Create or use an Amazon Business account, register in Amazon's Solution Provider Portal, submit the developer profile request, and wait for approval for the API roles you need.</p>
+                </article>
+                <article>
+                  <span>02</span>
+                  <strong>Create an app client in SPP.</strong>
+                  <p>After approval, create an app client in the Solution Provider Portal. This app is what gives you Login With Amazon credentials for the integration.</p>
+                </article>
+                <article>
+                  <span>03</span>
+                  <strong>Copy the Client ID.</strong>
+                  <p>Open the app credentials in SPP and copy the Client ID into this form. Keep the client secret private; it is only needed by the secure backend token exchange.</p>
+                </article>
+                <article>
+                  <span>04</span>
+                  <strong>Authorize the app as an Amazon Business admin.</strong>
+                  <p>Use the authorization URL for your Amazon Business marketplace, sign in as the Business account admin, select Allow, and copy the short-lived OAuth code from the redirect URL.</p>
+                </article>
+                <article>
+                  <span>05</span>
+                  <strong>Exchange the OAuth code for the refresh token.</strong>
+                  <p>Post the OAuth code, Client ID, client secret, and redirect URI to Amazon's LWA token endpoint. Save the returned refresh_token here; access tokens expire quickly, but the refresh token is used to request new access tokens.</p>
+                </article>
+                <article>
+                  <span>Sandbox</span>
+                  <strong>Testing shortcut.</strong>
+                  <p>For sandbox mode, create a sandbox app client, choose View sandbox credentials for the Client ID, then choose Create token in SPP to generate the sandbox refresh token.</p>
+                </article>
+              </div>
+              <div class="credential-links">
+                <a href="https://developer-docs.amazon.com/amazon-business/docs/onboarding-overview" target="_blank" rel="noreferrer">Amazon Business onboarding docs</a>
+                <a href="https://developer-docs.amazon.com/amazon-business/docs/generate-refresh-token" target="_blank" rel="noreferrer">Generate refresh token docs</a>
+                <a href="https://developer-docs.amazon.com/amazon-business/docs/amazon-business-api-sandbox" target="_blank" rel="noreferrer">Sandbox credential docs</a>
+              </div>
+            </details>
+
+            <div class="automation-result" id="automationResult" role="status" aria-live="polite"></div>
+
+            <div class="history-heading">
+              <h3>Order history</h3>
+              <button class="button button-light" id="exportButton" type="button">Export CSV</button>
+            </div>
+            <div class="history-list" id="historyList"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <template id="stepTemplate">
+      <article class="step-card">
+        <div class="step-top">
+          <div class="step-number"></div>
+          <button class="icon-button remove-step" type="button" title="Remove gift step" aria-label="Remove gift step">×</button>
+        </div>
+        <div class="form-grid two-col compact">
+          <label>
+            <span>Step name</span>
+            <input data-field="name" type="text">
+          </label>
+          <label>
+            <span>Send date</span>
+            <input data-field="sendDate" type="date">
+          </label>
+          <label>
+            <span>Gift name</span>
+            <input data-field="itemName" type="text">
+          </label>
+          <label>
+            <span>ASIN</span>
+            <input data-field="asin" type="text">
+          </label>
+          <label class="full-span">
+            <span>Amazon URL</span>
+            <div class="amazon-url-row">
+              <input data-field="itemUrl" type="url" placeholder="https://www.amazon.com/.../dp/B000000000">
+              <button class="button button-light fill-amazon-details" type="button">Fill details</button>
+            </div>
+            <small class="field-hint amazon-lookup-status">Paste a product URL to fill ASIN and a product-name guess.</small>
+          </label>
+          <label>
+            <span>Quantity</span>
+            <input data-field="quantity" type="number" min="1">
+          </label>
+          <label>
+            <span>Internal note</span>
+            <input data-field="note" type="text">
+          </label>
+          <label class="full-span">
+            <span>Gift message</span>
+            <textarea data-field="message" rows="4"></textarea>
+          </label>
+        </div>
+        <details class="email-details">
+          <summary>Email follow-up copy</summary>
+          <div class="form-grid two-col compact">
+            <label>
+              <span>Subject when sent</span>
+              <input data-field="emailSubjectWhenSent" type="text">
+            </label>
+            <label>
+              <span>Subject when delivered</span>
+              <input data-field="emailSubjectWhenDelivered" type="text">
+            </label>
+            <label>
+              <span>Body when sent</span>
+              <textarea data-field="emailBodyWhenSent" rows="3"></textarea>
+            </label>
+            <label>
+              <span>Body when delivered</span>
+              <textarea data-field="emailBodyWhenDelivered" rows="3"></textarea>
+            </label>
+          </div>
+        </details>
+      </article>
+    </template>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
