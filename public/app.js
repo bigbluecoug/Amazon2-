@@ -101,6 +101,146 @@ const demoState = () => ({
 
 let state = loadState();
 let currentSlide = 0;
+let authConfig = null;
+let currentUser = null;
+
+async function initAuth() {
+  try {
+    const response = await fetch("/api/auth/config", { credentials: "same-origin" });
+    authConfig = await response.json();
+    currentUser = authConfig.user || null;
+
+    if (currentUser) {
+      routeAuthenticatedUser();
+    } else {
+      showSignIn();
+      renderGoogleButtonWhenReady();
+    }
+  } catch (_error) {
+    showSignIn("Could not reach the auth server. Make sure the local server is running.");
+  }
+}
+
+function showSignIn(message = "") {
+  byId("appHeader").hidden = true;
+  byId("appShell").hidden = true;
+  byId("authGate").hidden = false;
+  byId("signInPanel").hidden = false;
+  byId("onboardingPanel").hidden = true;
+
+  if (!authConfig?.configured) {
+    byId("authStatus").textContent = "Google login is not configured yet. Set GOOGLE_CLIENT_ID and SESSION_SECRET, then restart the server.";
+  } else {
+    byId("authStatus").textContent = message || "Use your Google account to open this secure workspace.";
+  }
+}
+
+function routeAuthenticatedUser() {
+  if (currentUser?.onboarded) {
+    showApp();
+  } else {
+    showOnboarding();
+  }
+}
+
+function showOnboarding() {
+  byId("appHeader").hidden = true;
+  byId("appShell").hidden = true;
+  byId("authGate").hidden = false;
+  byId("signInPanel").hidden = true;
+  byId("onboardingPanel").hidden = false;
+}
+
+function showApp() {
+  byId("authGate").hidden = true;
+  byId("appHeader").hidden = false;
+  byId("appShell").hidden = false;
+  byId("userBadge").textContent = currentUser?.email ? `Signed in as ${currentUser.email}` : "";
+  render();
+}
+
+function renderGoogleButtonWhenReady(attempt = 0) {
+  if (!authConfig?.configured) return;
+
+  if (!window.google?.accounts?.id) {
+    if (attempt < 30) {
+      setTimeout(() => renderGoogleButtonWhenReady(attempt + 1), 200);
+    } else {
+      byId("authStatus").textContent = "Google sign-in script did not load. Check your network connection and reload.";
+    }
+    return;
+  }
+
+  byId("googleButton").innerHTML = "";
+  window.google.accounts.id.initialize({
+    client_id: authConfig.clientId,
+    callback: handleGoogleCredential
+  });
+  window.google.accounts.id.renderButton(byId("googleButton"), {
+    theme: "outline",
+    size: "large",
+    text: "signin_with",
+    shape: "pill",
+    width: 280
+  });
+  byId("authStatus").textContent = "Use Google sign-in to continue.";
+}
+
+async function handleGoogleCredential(response) {
+  byId("authStatus").textContent = "Verifying Google sign-in...";
+  const result = await fetch("/api/auth/google", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ credential: response.credential })
+  });
+  const payload = await result.json();
+
+  if (!payload.ok) {
+    byId("authStatus").textContent = payload.errors?.join(" ") || "Google sign-in failed.";
+    return;
+  }
+
+  currentUser = payload.user;
+  routeAuthenticatedUser();
+}
+
+async function submitOnboarding(event) {
+  event.preventDefault();
+  const result = await fetch("/api/auth/onboarding", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      companyName: fieldValue("onboardingCompany"),
+      teamName: fieldValue("onboardingTeam"),
+      role: fieldValue("onboardingRole"),
+      useCase: fieldValue("onboardingUseCase")
+    })
+  });
+  const payload = await result.json();
+
+  if (!payload.ok) {
+    showSignIn(payload.errors?.join(" ") || "Could not complete onboarding.");
+    return;
+  }
+
+  currentUser = payload.user;
+  if (fieldValue("onboardingCompany")) {
+    state.campaign.owner = currentUser.name || state.campaign.owner;
+    state.campaign.targetFilter = fieldValue("onboardingUseCase");
+    silentSave();
+  }
+  showApp();
+}
+
+async function signOut() {
+  await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+  if (window.google?.accounts?.id) window.google.accounts.id.disableAutoSelect();
+  currentUser = null;
+  showSignIn("Signed out.");
+  renderGoogleButtonWhenReady();
+}
 
 function loadState() {
   const raw = localStorage.getItem(storeKey);
@@ -749,6 +889,8 @@ function escapeHtml(value) {
 function wireButtons() {
   byId("saveButton").addEventListener("click", saveState);
   byId("heroRunButton").addEventListener("click", processDueGifts);
+  byId("logoutButton").addEventListener("click", signOut);
+  byId("onboardingPanel").addEventListener("submit", submitOnboarding);
   document.querySelectorAll(".need-help-link").forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
@@ -793,5 +935,6 @@ function wireButtons() {
 
 bindCampaignFields();
 wireButtons();
+initAuth();
 render();
 silentSave();

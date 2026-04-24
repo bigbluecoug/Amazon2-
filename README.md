@@ -24,6 +24,24 @@ http://127.0.0.1:4174
 
 Set a custom port with `PORT=4180 ruby server.rb` if needed.
 
+## Google Login Setup
+
+The app is protected by Google sign-in. Create a Google OAuth Web Client in Google Cloud Console, add your app origin to Authorized JavaScript origins, then start the server with:
+
+```bash
+GOOGLE_CLIENT_ID="your-web-client-id.apps.googleusercontent.com" \
+SESSION_SECRET="use-a-long-random-secret" \
+ruby server.rb
+```
+
+For local development on the default port, add this origin in Google Cloud:
+
+```text
+http://127.0.0.1:4174
+```
+
+The server verifies Google ID tokens before setting a signed, HttpOnly session cookie. The order-processing API rejects unauthenticated requests.
+
 ## Amazon Automation Boundary
 
 The current app supports queue-only and sandbox-style processing. The `amazon-business-api` mode creates records marked `ready_for_live_connector` when credential fields are present, but it does not place live Amazon orders yet.

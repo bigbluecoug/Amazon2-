@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>GiftFlow Studio</title>
     <link rel="stylesheet" href="/styles.css">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
-    <header class="topbar">
+    <header class="topbar" id="appHeader" hidden>
       <a class="brand" href="#overview" aria-label="GiftFlow Studio home">
         <span class="brand-mark">GF</span>
         <span>GiftFlow</span>
@@ -18,10 +19,62 @@
         <a href="#prospects">Prospects</a>
         <a href="#automation">Automation</a>
       </nav>
-      <button class="button button-dark" id="saveButton" type="button">Save</button>
+      <div class="topbar-actions">
+        <span class="user-badge" id="userBadge"></span>
+        <button class="button button-light" id="logoutButton" type="button">Sign out</button>
+        <button class="button button-dark" id="saveButton" type="button">Save</button>
+      </div>
     </header>
 
-    <main>
+    <section class="auth-gate" id="authGate">
+      <div class="auth-panel" id="signInPanel">
+        <p class="launch-note">Secure workspace</p>
+        <h1>Sign in before gifting.</h1>
+        <p class="lede">GiftFlow keeps prospect lists, gift messages, and Amazon automation controls behind Google sign-in.</p>
+        <div class="google-button-wrap" id="googleButton"></div>
+        <p class="auth-status" id="authStatus">Checking Google login setup...</p>
+        <details class="auth-setup">
+          <summary>Google login setup</summary>
+          <ol>
+            <li>Create a Google OAuth web client in Google Cloud Console.</li>
+            <li>Add this local origin, for example <code>http://127.0.0.1:4174</code>, to Authorized JavaScript origins.</li>
+            <li>Start this app with <code>GOOGLE_CLIENT_ID</code> and a long random <code>SESSION_SECRET</code>.</li>
+          </ol>
+        </details>
+      </div>
+
+      <form class="auth-panel onboarding-panel" id="onboardingPanel" hidden>
+        <p class="launch-note">First run</p>
+        <h1>Set up your workspace.</h1>
+        <p class="lede">A few details help personalize campaign ownership and keep your team aligned.</p>
+        <div class="form-grid two-col">
+          <label>
+            <span>Company name</span>
+            <input id="onboardingCompany" type="text" autocomplete="organization" required>
+          </label>
+          <label>
+            <span>Team name</span>
+            <input id="onboardingTeam" type="text" placeholder="Sales, Partnerships, Founders">
+          </label>
+          <label>
+            <span>Your role</span>
+            <input id="onboardingRole" type="text" placeholder="Founder, AE, SDR lead">
+          </label>
+          <label>
+            <span>Main use case</span>
+            <select id="onboardingUseCase">
+              <option value="Prospect outreach">Prospect outreach</option>
+              <option value="Customer thank-yous">Customer thank-yous</option>
+              <option value="Partner campaigns">Partner campaigns</option>
+              <option value="Recruiting">Recruiting</option>
+            </select>
+          </label>
+        </div>
+        <button class="button button-dark" type="submit">Enter GiftFlow</button>
+      </form>
+    </section>
+
+    <main id="appShell" hidden>
       <section class="hero" id="overview">
         <div class="hero-copy">
           <p class="launch-note">Private automation studio for prospect gifting</p>
@@ -118,7 +171,10 @@
       </section>
 
       <section class="section reason-band" aria-label="Why this workflow exists">
-        <div>
+        <figure class="reason-image">
+          <img src="/gift-workflow.svg" alt="Gift campaign cards flowing into an automated gift send">
+        </figure>
+        <div class="reason-copy">
           <p class="eyebrow">Because gift campaigns should not be this manual</p>
           <h2>Keep the personal touch. Remove the repetitive work.</h2>
         </div>
