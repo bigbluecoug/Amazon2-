@@ -114,7 +114,6 @@ async function initAuth() {
       routeAuthenticatedUser();
     } else {
       showLanding();
-      renderGoogleButtonWhenReady();
     }
   } catch (_error) {
     showLanding();
@@ -140,11 +139,20 @@ function showSignIn(message = "") {
   byId("signInPanel").hidden = false;
   byId("onboardingPanel").hidden = true;
 
+  byId("authStatus").textContent = message || authReadyMessage();
+  byId("authEmail").focus();
+}
+
+function authReadyMessage() {
   if (!authConfig?.configured) {
-    byId("authStatus").textContent = "Google login is not configured yet. Set GOOGLE_CLIENT_ID and SESSION_SECRET, then restart the server.";
-  } else {
-    byId("authStatus").textContent = message || "Use your Google account to open this secure workspace.";
+    return "Login is not configured yet. Set AUTH_EMAIL and AUTH_PASSWORD, then restart the server.";
   }
+
+  if (authConfig.usingDefaultCredentials) {
+    return "Local demo login is enabled: team@giftflow.local / giftflow-demo. Set AUTH_EMAIL and AUTH_PASSWORD before sharing this workspace.";
+  }
+
+  return "Use your workspace email and password to continue.";
 }
 
 function routeAuthenticatedUser() {
@@ -176,45 +184,22 @@ function showApp() {
   byId("campaign").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function renderGoogleButtonWhenReady(attempt = 0) {
-  if (!authConfig?.configured) return;
-
-  if (!window.google?.accounts?.id) {
-    if (attempt < 30) {
-      setTimeout(() => renderGoogleButtonWhenReady(attempt + 1), 200);
-    } else {
-      byId("authStatus").textContent = "Google sign-in script did not load. Check your network connection and reload.";
-    }
-    return;
-  }
-
-  byId("googleButton").innerHTML = "";
-  window.google.accounts.id.initialize({
-    client_id: authConfig.clientId,
-    callback: handleGoogleCredential
-  });
-  window.google.accounts.id.renderButton(byId("googleButton"), {
-    theme: "outline",
-    size: "large",
-    text: "signin_with",
-    shape: "pill",
-    width: 280
-  });
-  byId("authStatus").textContent = "Use Google sign-in to continue.";
-}
-
-async function handleGoogleCredential(response) {
-  byId("authStatus").textContent = "Verifying Google sign-in...";
-  const result = await fetch("/api/auth/google", {
+async function submitSignIn(event) {
+  event.preventDefault();
+  byId("authStatus").textContent = "Checking credentials...";
+  const result = await fetch("/api/auth/login", {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ credential: response.credential })
+    body: JSON.stringify({
+      email: fieldValue("authEmail"),
+      password: fieldValue("authPassword")
+    })
   });
   const payload = await result.json();
 
   if (!payload.ok) {
-    byId("authStatus").textContent = payload.errors?.join(" ") || "Google sign-in failed.";
+    byId("authStatus").textContent = payload.errors?.join(" ") || "Sign-in failed.";
     return;
   }
 
@@ -253,10 +238,8 @@ async function submitOnboarding(event) {
 
 async function signOut() {
   await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
-  if (window.google?.accounts?.id) window.google.accounts.id.disableAutoSelect();
   currentUser = null;
   showLanding();
-  renderGoogleButtonWhenReady();
 }
 
 function loadState() {
@@ -907,17 +890,16 @@ function wireButtons() {
   document.querySelectorAll("[data-start-signin]").forEach((button) => {
     button.addEventListener("click", () => {
       showSignIn();
-      renderGoogleButtonWhenReady();
     });
   });
   byId("getStartedButton").addEventListener("click", () => {
     showSignIn();
-    renderGoogleButtonWhenReady();
   });
   byId("backToIntroButton").addEventListener("click", showLanding);
   byId("saveButton").addEventListener("click", saveState);
   byId("heroRunButton").addEventListener("click", processDueGifts);
   byId("logoutButton").addEventListener("click", signOut);
+  byId("signInPanel").addEventListener("submit", submitSignIn);
   byId("onboardingPanel").addEventListener("submit", submitOnboarding);
   document.querySelectorAll(".need-help-link").forEach((link) => {
     link.addEventListener("click", (event) => {

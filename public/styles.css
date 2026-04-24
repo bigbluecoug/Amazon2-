@@ -15,6 +15,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -132,9 +136,15 @@ a {
   font-size: clamp(58px, 8vw, 118px);
 }
 
-.google-button-wrap {
-  min-height: 44px;
-  margin: 24px 0 14px;
+.auth-fields {
+  margin: 24px 0 18px;
+}
+
+.auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .auth-status {

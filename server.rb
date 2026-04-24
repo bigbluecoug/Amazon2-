@@ -1,17 +1,20 @@
 require "base64"
 require "date"
 require "json"
-require "net/http"
 require "openssl"
 require "securerandom"
 require "time"
-require "uri"
 require "webrick"
 
 ROOT = File.expand_path(__dir__)
 PUBLIC_ROOT = File.join(ROOT, "public")
 PORT = Integer(ENV.fetch("PORT", "4174"))
-GOOGLE_CLIENT_ID = ENV.fetch("GOOGLE_CLIENT_ID", "").strip
+DEFAULT_AUTH_EMAIL = "team@giftflow.local"
+DEFAULT_AUTH_PASSWORD = "giftflow-demo"
+AUTH_EMAIL = ENV.fetch("AUTH_EMAIL", DEFAULT_AUTH_EMAIL).strip.downcase
+AUTH_PASSWORD = ENV.fetch("AUTH_PASSWORD", DEFAULT_AUTH_PASSWORD)
+AUTH_NAME = ENV.fetch("AUTH_NAME", "GiftFlow Team").strip
+USING_DEFAULT_CREDENTIALS = ENV["AUTH_EMAIL"].nil? || ENV["AUTH_PASSWORD"].nil?
 SESSION_SECRET = ENV.fetch("SESSION_SECRET", "development-only-change-me")
 SESSION_COOKIE = "giftflow_session"
 SESSION_MAX_AGE = 60 * 60 * 24 * 7
@@ -96,9 +99,17 @@ def session_signature(payload)
 end
 
 def secure_compare(left, right)
+  left = left.to_s
+  right = right.to_s
   return false unless left.bytesize == right.bytesize
 
-  OpenSSL.fixed_length_secure_compare(left, right)
+  if OpenSSL.respond_to?(:fixed_length_secure_compare)
+    OpenSSL.fixed_length_secure_compare(left, right)
+  else
+    result = 0
+    left.bytes.zip(right.bytes) { |left_byte, right_byte| result |= left_byte ^ right_byte }
+    result.zero?
+  end
 end
 
 def session_cookie(user)
@@ -130,33 +141,22 @@ rescue JSON::ParserError, ArgumentError, KeyError
   nil
 end
 
-def verify_google_token(id_token)
-  raise "Google login is not configured. Set GOOGLE_CLIENT_ID before starting the server." unless present?(GOOGLE_CLIENT_ID)
-  raise "Missing Google credential." unless present?(id_token)
+def authenticate_user(email, password)
+  raise "Authentication is not configured. Set AUTH_EMAIL and AUTH_PASSWORD before starting the server." unless present?(AUTH_EMAIL) && present?(AUTH_PASSWORD)
 
-  uri = URI("https://oauth2.googleapis.com/tokeninfo")
-  uri.query = URI.encode_www_form(id_token: id_token)
-  response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 5) do |http|
-    http.get(uri)
-  end
+  normalized_email = email.to_s.strip.downcase
+  password_value = password.to_s
 
-  raise "Google could not verify that credential." unless response.is_a?(Net::HTTPSuccess)
-
-  payload = JSON.parse(response.body)
-  issuer = payload["iss"].to_s
-  expires_at = Time.at(payload["exp"].to_i)
-
-  raise "Google credential was issued for a different app." unless payload["aud"].to_s == GOOGLE_CLIENT_ID
-  raise "Google credential issuer is invalid." unless ["accounts.google.com", "https://accounts.google.com"].include?(issuer)
-  raise "Google credential has expired." if expires_at <= Time.now
-  raise "Google account email is not verified." unless payload["email_verified"].to_s == "true"
+  valid_email = secure_compare(normalized_email, AUTH_EMAIL)
+  valid_password = secure_compare(password_value, AUTH_PASSWORD)
+  raise "Email or password is incorrect." unless valid_email && valid_password
 
   {
-    "sub" => payload.fetch("sub"),
-    "email" => payload.fetch("email"),
-    "name" => payload["name"].to_s,
-    "picture" => payload["picture"].to_s,
-    "hostedDomain" => payload["hd"].to_s,
+    "sub" => "local-auth:#{AUTH_EMAIL}",
+    "email" => AUTH_EMAIL,
+    "name" => AUTH_NAME.empty? ? AUTH_EMAIL.split("@").first : AUTH_NAME,
+    "picture" => "",
+    "hostedDomain" => "",
     "onboarded" => false,
     "signedInAt" => Time.now.utc.iso8601
   }
@@ -166,7 +166,7 @@ def require_user(request, response)
   user = current_user(request)
   return user if user
 
-  json_response(response, { ok: false, errors: ["Sign in with Google to continue."] }, 401)
+  json_response(response, { ok: false, errors: ["Sign in to continue."] }, 401)
   nil
 end
 
@@ -313,8 +313,9 @@ end
 server.mount_proc("/api/auth/config") do |request, response|
   json_response(response, {
     ok: true,
-    configured: present?(GOOGLE_CLIENT_ID),
-    clientId: GOOGLE_CLIENT_ID,
+    configured: present?(AUTH_EMAIL) && present?(AUTH_PASSWORD),
+    authMode: "password",
+    usingDefaultCredentials: USING_DEFAULT_CREDENTIALS,
     user: current_user(request)
   })
 end
@@ -324,10 +325,10 @@ server.mount_proc("/api/auth/session") do |request, response|
   json_response(response, { ok: true, authenticated: !!user, user: user })
 end
 
-server.mount_proc("/api/auth/google") do |request, response|
+server.mount_proc("/api/auth/login") do |request, response|
   begin
     payload = JSON.parse(request.body.to_s)
-    user = verify_google_token(payload["credential"])
+    user = authenticate_user(payload["email"], payload["password"])
     response["Set-Cookie"] = session_cookie(user)
     json_response(response, { ok: true, user: user })
   rescue JSON::ParserError

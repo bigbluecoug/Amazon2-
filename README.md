@@ -5,7 +5,7 @@ A local prototype for automating Amazon gift campaigns for prospect outreach.
 ## What It Does
 
 - Opens to a public product intro page before asking users to sign in.
-- Moves users through Google sign-in and a short onboarding flow before showing the campaign process workspace.
+- Moves users through a protected sign-in and a short onboarding flow before showing the campaign process workspace.
 - Builds a multi-step gift sequence with send dates, ASINs or Amazon URLs, quantities, gift messages, and follow-up email copy.
 - Stores prospect names, shipping addresses, company data, owners, and readiness flags in the browser.
 - Requires a sequence confirmation before automation runs so gift/message edits are intentional.
@@ -26,23 +26,26 @@ http://127.0.0.1:4174
 
 Set a custom port with `PORT=4180 ruby server.rb` if needed.
 
-## Google Login Setup
+## Temporary Login Setup
 
-The app is protected by Google sign-in. Create a Google OAuth Web Client in Google Cloud Console, add your app origin to Authorized JavaScript origins, then start the server with:
+The app is protected by a temporary email/password login while the production identity provider is being decided. For local testing, the default credentials are:
+
+```text
+Email: team@giftflow.local
+Password: giftflow-demo
+```
+
+For anything shared with your team, set your own credentials before starting the server:
 
 ```bash
-GOOGLE_CLIENT_ID="your-web-client-id.apps.googleusercontent.com" \
+AUTH_EMAIL="you@company.com" \
+AUTH_PASSWORD="use-a-strong-password" \
+AUTH_NAME="Your Name" \
 SESSION_SECRET="use-a-long-random-secret" \
 ruby server.rb
 ```
 
-For local development on the default port, add this origin in Google Cloud:
-
-```text
-http://127.0.0.1:4174
-```
-
-The server verifies Google ID tokens before setting a signed, HttpOnly session cookie. The order-processing API rejects unauthenticated requests.
+The server verifies those credentials before setting a signed, HttpOnly session cookie. The order-processing API rejects unauthenticated requests.
 
 ## Amazon Automation Boundary
 

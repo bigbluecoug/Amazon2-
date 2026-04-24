@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>GiftFlow Studio</title>
     <link rel="stylesheet" href="/styles.css">
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
     <header class="topbar landing-header" id="landingHeader">
@@ -51,7 +50,7 @@
             <a class="button button-light" href="#landingHow">See how it works</a>
           </div>
           <div class="hero-proof" aria-label="Workflow highlights">
-            <span>Google sign-in</span>
+            <span>Secure sign-in</span>
             <span>Sequence approvals</span>
             <span>Duplicate-send protection</span>
           </div>
@@ -99,22 +98,34 @@
     </main>
 
     <section class="auth-gate" id="authGate" hidden>
-      <div class="auth-panel" id="signInPanel">
+      <form class="auth-panel" id="signInPanel">
         <p class="launch-note">Secure workspace</p>
         <h1>Sign in before gifting.</h1>
-        <p class="lede">GiftFlow keeps prospect lists, gift messages, and Amazon automation controls behind Google sign-in.</p>
-        <div class="google-button-wrap" id="googleButton"></div>
-        <p class="auth-status" id="authStatus">Checking Google login setup...</p>
-        <button class="button button-light" id="backToIntroButton" type="button">Back to intro</button>
+        <p class="lede">GiftFlow keeps prospect lists, gift messages, and Amazon automation controls behind a protected workspace login.</p>
+        <div class="form-grid two-col auth-fields">
+          <label>
+            <span>Email address</span>
+            <input id="authEmail" type="email" autocomplete="email" required>
+          </label>
+          <label>
+            <span>Password</span>
+            <input id="authPassword" type="password" autocomplete="current-password" required>
+          </label>
+        </div>
+        <div class="auth-actions">
+          <button class="button button-dark" type="submit">Sign in</button>
+          <button class="button button-light" id="backToIntroButton" type="button">Back to intro</button>
+        </div>
+        <p class="auth-status" id="authStatus">Checking login setup...</p>
         <details class="auth-setup">
-          <summary>Google login setup</summary>
+          <summary>Temporary login setup</summary>
           <ol>
-            <li>Create a Google OAuth web client in Google Cloud Console.</li>
-            <li>Add this local origin, for example <code>http://127.0.0.1:4174</code>, to Authorized JavaScript origins.</li>
-            <li>Start this app with <code>GOOGLE_CLIENT_ID</code> and a long random <code>SESSION_SECRET</code>.</li>
+            <li>Start this app with <code>AUTH_EMAIL</code>, <code>AUTH_PASSWORD</code>, and a long random <code>SESSION_SECRET</code>.</li>
+            <li>Share those credentials only with teammates who should access campaign and prospect data.</li>
+            <li>Replace this temporary login with your production identity provider before going live.</li>
           </ol>
         </details>
-      </div>
+      </form>
 
       <form class="auth-panel onboarding-panel" id="onboardingPanel" hidden>
         <p class="launch-note">First run</p>
