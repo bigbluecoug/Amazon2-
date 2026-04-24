@@ -8,6 +8,18 @@
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
+    <header class="topbar landing-header" id="landingHeader">
+      <a class="brand" href="#landingHero" aria-label="GiftFlow Studio home">
+        <span class="brand-mark">GF</span>
+        <span>GiftFlow</span>
+      </a>
+      <nav class="nav" aria-label="Intro">
+        <a href="#landingHow">How it works</a>
+        <a href="#landingWhy">Why GiftFlow</a>
+      </nav>
+      <button class="button button-dark" id="getStartedButton" type="button">Get started</button>
+    </header>
+
     <header class="topbar" id="appHeader" hidden>
       <a class="brand" href="#overview" aria-label="GiftFlow Studio home">
         <span class="brand-mark">GF</span>
@@ -26,13 +38,74 @@
       </div>
     </header>
 
-    <section class="auth-gate" id="authGate">
+    <main class="landing-page" id="landingPage">
+      <section class="landing-hero" id="landingHero">
+        <div class="hero-copy">
+          <p class="launch-note">Prospect gifting, without the manual maze</p>
+          <h1>Turn gift campaigns into a repeatable workflow.</h1>
+          <p class="lede">
+            GiftFlow helps your team plan gifts, approve Amazon messages, organize prospects, and queue due sends from one secure workspace.
+          </p>
+          <div class="hero-actions">
+            <button class="button button-dark" type="button" data-start-signin>Get started</button>
+            <a class="button button-light" href="#landingHow">See how it works</a>
+          </div>
+          <div class="hero-proof" aria-label="Workflow highlights">
+            <span>Google sign-in</span>
+            <span>Sequence approvals</span>
+            <span>Duplicate-send protection</span>
+          </div>
+        </div>
+
+        <aside class="landing-preview" aria-label="GiftFlow product preview">
+          <img src="/gift-workflow.svg" alt="Gift campaign workflow preview">
+        </aside>
+      </section>
+
+      <section class="section intro-steps" id="landingHow" aria-label="How GiftFlow works">
+        <div>
+          <p class="eyebrow">How it works</p>
+          <h2>A simple process for every campaign.</h2>
+        </div>
+        <div class="intro-step-grid">
+          <article>
+            <span>01</span>
+            <strong>Build the campaign.</strong>
+            <p>Name the outreach motion, choose owners, and define the outcome.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <strong>Add prospects.</strong>
+            <p>Load people and shipping addresses, then mark each recipient ready.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <strong>Approve gifts.</strong>
+            <p>Add gifts, dates, Amazon URLs, and messages before locking the sequence.</p>
+          </article>
+          <article>
+            <span>04</span>
+            <strong>Process due sends.</strong>
+            <p>Queue the gifts that are due while avoiding accidental repeat sends.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section landing-cta" id="landingWhy">
+        <p class="eyebrow">Ready when your team is</p>
+        <h2>Start secure, then move straight into the process page.</h2>
+        <button class="button button-dark" type="button" data-start-signin>Get started</button>
+      </section>
+    </main>
+
+    <section class="auth-gate" id="authGate" hidden>
       <div class="auth-panel" id="signInPanel">
         <p class="launch-note">Secure workspace</p>
         <h1>Sign in before gifting.</h1>
         <p class="lede">GiftFlow keeps prospect lists, gift messages, and Amazon automation controls behind Google sign-in.</p>
         <div class="google-button-wrap" id="googleButton"></div>
         <p class="auth-status" id="authStatus">Checking Google login setup...</p>
+        <button class="button button-light" id="backToIntroButton" type="button">Back to intro</button>
         <details class="auth-setup">
           <summary>Google login setup</summary>
           <ol>

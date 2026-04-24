@@ -113,15 +113,27 @@ async function initAuth() {
     if (currentUser) {
       routeAuthenticatedUser();
     } else {
-      showSignIn();
+      showLanding();
       renderGoogleButtonWhenReady();
     }
   } catch (_error) {
-    showSignIn("Could not reach the auth server. Make sure the local server is running.");
+    showLanding();
   }
 }
 
+function showLanding() {
+  byId("landingHeader").hidden = false;
+  byId("landingPage").hidden = false;
+  byId("appHeader").hidden = true;
+  byId("appShell").hidden = true;
+  byId("authGate").hidden = true;
+  byId("signInPanel").hidden = false;
+  byId("onboardingPanel").hidden = true;
+}
+
 function showSignIn(message = "") {
+  byId("landingHeader").hidden = true;
+  byId("landingPage").hidden = true;
   byId("appHeader").hidden = true;
   byId("appShell").hidden = true;
   byId("authGate").hidden = false;
@@ -144,6 +156,8 @@ function routeAuthenticatedUser() {
 }
 
 function showOnboarding() {
+  byId("landingHeader").hidden = true;
+  byId("landingPage").hidden = true;
   byId("appHeader").hidden = true;
   byId("appShell").hidden = true;
   byId("authGate").hidden = false;
@@ -152,11 +166,14 @@ function showOnboarding() {
 }
 
 function showApp() {
+  byId("landingHeader").hidden = true;
+  byId("landingPage").hidden = true;
   byId("authGate").hidden = true;
   byId("appHeader").hidden = false;
   byId("appShell").hidden = false;
   byId("userBadge").textContent = currentUser?.email ? `Signed in as ${currentUser.email}` : "";
   render();
+  byId("campaign").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderGoogleButtonWhenReady(attempt = 0) {
@@ -238,7 +255,7 @@ async function signOut() {
   await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
   if (window.google?.accounts?.id) window.google.accounts.id.disableAutoSelect();
   currentUser = null;
-  showSignIn("Signed out.");
+  showLanding();
   renderGoogleButtonWhenReady();
 }
 
@@ -887,6 +904,17 @@ function escapeHtml(value) {
 }
 
 function wireButtons() {
+  document.querySelectorAll("[data-start-signin]").forEach((button) => {
+    button.addEventListener("click", () => {
+      showSignIn();
+      renderGoogleButtonWhenReady();
+    });
+  });
+  byId("getStartedButton").addEventListener("click", () => {
+    showSignIn();
+    renderGoogleButtonWhenReady();
+  });
+  byId("backToIntroButton").addEventListener("click", showLanding);
   byId("saveButton").addEventListener("click", saveState);
   byId("heroRunButton").addEventListener("click", processDueGifts);
   byId("logoutButton").addEventListener("click", signOut);

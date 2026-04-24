@@ -4,6 +4,8 @@ A local prototype for automating Amazon gift campaigns for prospect outreach.
 
 ## What It Does
 
+- Opens to a public product intro page before asking users to sign in.
+- Moves users through Google sign-in and a short onboarding flow before showing the campaign process workspace.
 - Builds a multi-step gift sequence with send dates, ASINs or Amazon URLs, quantities, gift messages, and follow-up email copy.
 - Stores prospect names, shipping addresses, company data, owners, and readiness flags in the browser.
 - Requires a sequence confirmation before automation runs so gift/message edits are intentional.
