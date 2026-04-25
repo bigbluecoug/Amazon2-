@@ -1,4 +1,6 @@
 const storeKey = "giftflow-studio-state-v1";
+const demoAuthEmail = "team@giftflow.local";
+const demoAuthPassword = "giftflow-demo";
 
 const today = new Date().toISOString().slice(0, 10);
 const addDays = (days) => {
@@ -138,6 +140,7 @@ function showSignIn(message = "") {
   byId("authGate").hidden = false;
   byId("signInPanel").hidden = false;
   byId("onboardingPanel").hidden = true;
+  byId("demoLoginButton").hidden = !authConfig?.usingDefaultCredentials;
 
   byId("authStatus").textContent = message || authReadyMessage();
   byId("authEmail").focus();
@@ -184,27 +187,73 @@ function showApp() {
   byId("campaign").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-async function submitSignIn(event) {
-  event.preventDefault();
-  byId("authStatus").textContent = "Checking credentials...";
+async function requestSignIn(email, password, statusMessage = "Checking credentials...") {
+  byId("authStatus").textContent = statusMessage;
   const result = await fetch("/api/auth/login", {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      email: fieldValue("authEmail"),
-      password: fieldValue("authPassword")
+      email,
+      password
     })
   });
   const payload = await result.json();
 
   if (!payload.ok) {
     byId("authStatus").textContent = payload.errors?.join(" ") || "Sign-in failed.";
+    return null;
+  }
+
+  currentUser = payload.user;
+  return currentUser;
+}
+
+async function submitSignIn(event) {
+  event.preventDefault();
+  const user = await requestSignIn(fieldValue("authEmail"), fieldValue("authPassword"));
+  if (!user) return;
+
+  routeAuthenticatedUser();
+}
+
+async function openDemoWorkspace() {
+  if (!authConfig?.usingDefaultCredentials) {
+    showSignIn("Demo login is only available when the local default credentials are enabled.");
+    return;
+  }
+
+  setValue("authEmail", demoAuthEmail);
+  setValue("authPassword", demoAuthPassword);
+
+  const user = await requestSignIn(demoAuthEmail, demoAuthPassword, "Opening the demo workspace...");
+  if (!user) return;
+
+  if (user.onboarded) {
+    showApp();
+    return;
+  }
+
+  const result = await fetch("/api/auth/onboarding", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      companyName: "GiftFlow Demo",
+      teamName: "Sales",
+      role: "Demo user",
+      useCase: "Prospect outreach"
+    })
+  });
+  const payload = await result.json();
+
+  if (!payload.ok) {
+    byId("authStatus").textContent = payload.errors?.join(" ") || "Could not open the demo workspace.";
     return;
   }
 
   currentUser = payload.user;
-  routeAuthenticatedUser();
+  showApp();
 }
 
 async function submitOnboarding(event) {
@@ -895,6 +944,7 @@ function wireButtons() {
   byId("getStartedButton").addEventListener("click", () => {
     showSignIn();
   });
+  byId("demoLoginButton").addEventListener("click", openDemoWorkspace);
   byId("backToIntroButton").addEventListener("click", showLanding);
   byId("saveButton").addEventListener("click", saveState);
   byId("heroRunButton").addEventListener("click", processDueGifts);

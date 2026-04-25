@@ -49,15 +49,24 @@
             <button class="button button-dark" type="button" data-start-signin>Get started</button>
             <a class="button button-light" href="#landingHow">See how it works</a>
           </div>
-          <div class="hero-proof" aria-label="Workflow highlights">
-            <span>Secure sign-in</span>
-            <span>Sequence approvals</span>
-            <span>Duplicate-send protection</span>
+          <div class="hero-image-strip" aria-label="Workflow highlights">
+            <figure>
+              <img src="/giftflow-hero.jpg" alt="Wrapped gift and workflow dashboard">
+              <figcaption>Gift planning</figcaption>
+            </figure>
+            <figure>
+              <img src="/giftflow-approvals.jpg" alt="Gift message approval workspace with laptop and note card">
+              <figcaption>Approvals</figcaption>
+            </figure>
+            <figure>
+              <img src="/giftflow-queued.jpg" alt="Wrapped packages and shipping labels ready for queued sends">
+              <figcaption>Queued sends</figcaption>
+            </figure>
           </div>
         </div>
 
         <aside class="landing-preview" aria-label="GiftFlow product preview">
-          <img src="/gift-workflow.svg" alt="Gift campaign workflow preview">
+          <img src="/giftflow-hero.jpg" alt="Gift campaign workflow with laptop, wrapped gift, and shipping label">
         </aside>
       </section>
 
@@ -114,6 +123,7 @@
         </div>
         <div class="auth-actions">
           <button class="button button-dark" type="submit">Sign in</button>
+          <button class="button button-light" id="demoLoginButton" type="button" hidden>Open demo workspace</button>
           <button class="button button-light" id="backToIntroButton" type="button">Back to intro</button>
         </div>
         <p class="auth-status" id="authStatus">Checking login setup...</p>
@@ -171,17 +181,16 @@
             <button class="button button-light" id="heroRunButton" type="button">Process today</button>
           </div>
           <div class="hero-proof" aria-label="Workflow stats">
-            <span>Manual review before live sends</span>
-            <span>Deduped order queue</span>
-            <span>Team-owned prospect lists</span>
+            <span>Review</span>
+            <span>Queue</span>
+            <span>Teams</span>
           </div>
         </div>
 
         <aside class="phone-scene" aria-label="Campaign overview preview">
-          <div class="floating-card floating-card-one">
-            <span>Gift 01</span>
-            <strong>Coffee box</strong>
-          </div>
+          <figure class="floating-image floating-image-one" aria-hidden="true">
+            <img src="/giftflow-hero.jpg" alt="">
+          </figure>
           <div class="phone-shell">
             <div class="phone-header">
               <span class="camera-dot"></span>
@@ -210,10 +219,9 @@
             </div>
             <div class="mini-list" id="phoneSteps"></div>
           </div>
-          <div class="floating-card floating-card-two">
-            <span>Message</span>
-            <strong>Hi {{firstName}}</strong>
-          </div>
+          <figure class="floating-image floating-image-two" aria-hidden="true">
+            <img src="/gift-workflow.svg" alt="">
+          </figure>
         </aside>
       </section>
 
@@ -256,7 +264,7 @@
 
       <section class="section reason-band" aria-label="Why this workflow exists">
         <figure class="reason-image">
-          <img src="/gift-workflow.svg" alt="Gift campaign cards flowing into an automated gift send">
+          <img src="/giftflow-reason-photo.jpg" alt="Wrapped gift, shipping label, note cards, and campaign workflow dashboard">
         </figure>
         <div class="reason-copy">
           <p class="eyebrow">Because gift campaigns should not be this manual</p>
@@ -348,10 +356,6 @@
               </div>
               <button class="button button-light" id="addStepButton" type="button">Add gift</button>
             </div>
-            <div class="sequence-tools">
-              <button class="button button-dark" id="confirmSequenceButton" type="button">Confirm sequence</button>
-              <p id="sequenceConfirmation">Any gift edit requires a fresh confirmation before orders can run.</p>
-            </div>
             <div class="step-list" id="stepList"></div>
             <div class="sequence-footer">
               <div>
@@ -359,6 +363,10 @@
                 <p>Each gift can have its own date, Amazon item, message, and follow-up copy.</p>
               </div>
               <button class="button button-light" id="addStepFooterButton" type="button">Add another gift</button>
+            </div>
+            <div class="sequence-tools">
+              <button class="button button-dark" id="confirmSequenceButton" type="button">Confirm sequence</button>
+              <p id="sequenceConfirmation">Any gift edit requires a fresh confirmation before orders can run.</p>
             </div>
           </section>
 

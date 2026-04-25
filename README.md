@@ -26,6 +26,37 @@ http://127.0.0.1:4174
 
 Set a custom port with `PORT=4180 ruby server.rb` if needed.
 
+## Run It With Laravel Herd
+
+Herd serves PHP apps through local `.test` domains. This repo includes a small PHP front controller (`index.php`, `public/index.php`, and `herd-router.php`) that mirrors the Ruby API, so you can run the same UI and automation queue through Herd without starting `server.rb`.
+
+From the project root, link the site with a clean local name:
+
+```bash
+herd link giftflow
+herd open giftflow
+```
+
+Then use:
+
+```text
+http://giftflow.test
+```
+
+If you prefer the Herd UI, add this project as a linked directory and use `giftflow` as the site name. Linking the project root or the `public/` folder both work.
+
+For custom login credentials in Herd, copy the example env file and edit the values:
+
+```bash
+cp .env.example .env
+```
+
+Use a long random `SESSION_SECRET`; for example:
+
+```bash
+openssl rand -hex 32
+```
+
 ## Temporary Login Setup
 
 The app is protected by a temporary email/password login while the production identity provider is being decided. For local testing, the default credentials are:
@@ -34,6 +65,8 @@ The app is protected by a temporary email/password login while the production id
 Email: team@giftflow.local
 Password: giftflow-demo
 ```
+
+When the app is running with those local defaults, the sign-in screen also shows an **Open demo workspace** button that signs in and opens the flow page directly.
 
 For anything shared with your team, set your own credentials before starting the server:
 
