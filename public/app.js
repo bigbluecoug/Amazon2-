@@ -1,8 +1,35 @@
 const storeKey = "giftflow-studio-state-v1";
 const demoAuthEmail = "team@giftflow.local";
 const demoAuthPassword = "giftflow-demo";
+const affiliateIdeas = [
+  {
+    title: "Premium coffee sampler",
+    imageKey: "coffeeSampler",
+    query: "premium coffee sampler gift box",
+    message: "Hi {{firstName}}, thought this would make your next planning session a little better. - {{owner}}"
+  },
+  {
+    title: "Desk notebook set",
+    imageKey: "notebookSet",
+    query: "premium desk notebook set",
+    message: "Hi {{firstName}}, a useful place for the next round of big ideas. - {{owner}}"
+  },
+  {
+    title: "Insulated desk tumbler",
+    imageKey: "deskTumbler",
+    query: "insulated desk tumbler gift",
+    message: "Hi {{firstName}}, hope this keeps the good ideas fueled. - {{owner}}"
+  },
+  {
+    title: "Wireless charging stand",
+    imageKey: "chargingStand",
+    query: "wireless charging stand desk",
+    message: "Hi {{firstName}}, a small desk upgrade for the workday. - {{owner}}"
+  }
+];
 
 const today = new Date().toISOString().slice(0, 10);
+const amazonImageMaxAgeMs = 24 * 60 * 60 * 1000;
 const addDays = (days) => {
   const date = new Date();
   date.setDate(date.getDate() + days);
@@ -28,6 +55,8 @@ const demoState = () => ({
       itemName: "Premium coffee box",
       asin: "B000TEST1",
       itemUrl: "",
+      imageUrl: "",
+      imageUrlSavedAt: "",
       quantity: 1,
       message: "Hi {{firstName}}, thought this would make your next planning session a little better. - {{owner}}",
       emailSubjectWhenSent: "Sent a small thank-you",
@@ -44,6 +73,8 @@ const demoState = () => ({
       itemName: "Desk notebook",
       asin: "B000TEST2",
       itemUrl: "",
+      imageUrl: "",
+      imageUrlSavedAt: "",
       quantity: 1,
       message: "Hi {{firstName}}, another useful tool for big ideas. Looking forward to connecting. - {{owner}}",
       emailSubjectWhenSent: "Another small gift is on the way",
@@ -84,6 +115,10 @@ const demoState = () => ({
     clientId: "",
     refreshToken: "",
     endpoint: "https://api.business.amazon.com"
+  },
+  associates: {
+    tag: "",
+    images: {}
   },
   email: {
     enabled: "disabled",
@@ -319,6 +354,8 @@ function sequenceSignature() {
     step.itemName || "",
     step.asin || "",
     step.itemUrl || "",
+    step.imageUrl || "",
+    step.imageUrlSavedAt || "",
     Number(step.quantity || 0),
     step.message || "",
     step.emailSubjectWhenSent || "",
@@ -349,6 +386,7 @@ function fieldValue(id) {
 
 function bindField(id, getter, setter, afterChange = render) {
   const element = byId(id);
+  if (!element) return;
   element.value = getter() || "";
   element.addEventListener("input", () => {
     setter(element.value);
@@ -370,6 +408,13 @@ function bindCampaignFields() {
   bindField("amazonRefreshToken", () => state.amazon.refreshToken, (value) => state.amazon.refreshToken = value);
   bindField("amazonEndpoint", () => state.amazon.endpoint, (value) => state.amazon.endpoint = value);
   bindField("shippingDefaults", () => state.execution.shippingDefaults, (value) => state.execution.shippingDefaults = value);
+  bindField("affiliateTag", () => state.associates?.tag, (value) => {
+    state.associates = state.associates || {};
+    state.associates.tag = value;
+  }, () => {
+    renderAffiliateIdeas();
+    silentSave();
+  });
 }
 
 function markSequenceDirty() {
@@ -380,10 +425,81 @@ function markSequenceDirty() {
 function render() {
   renderInstructionSlides();
   renderMetrics();
+  renderAffiliateIdeas();
   renderSteps();
   renderRecipients();
   renderHistory();
   renderStatus();
+}
+
+function renderAffiliateIdeas() {
+  const list = byId("affiliateIdeaList");
+  if (!list) return;
+
+  list.innerHTML = affiliateIdeas.map((idea, index) => {
+    const url = buildAffiliateUrl(idea.query);
+    const imageUrl = freshAffiliateImageUrl(idea.imageKey);
+    return `
+      <article class="affiliate-idea-card">
+        <figure class="affiliate-idea-image ${imageUrl ? "" : "is-empty"}">
+          ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(idea.title)}">` : "<span>Add Amazon image URL</span>"}
+        </figure>
+        <div>
+          <span>Idea ${index + 1}</span>
+          <strong>${escapeHtml(idea.title)}</strong>
+        </div>
+        <label class="affiliate-image-field">
+          <span>Amazon image URL</span>
+          <input type="url" value="${escapeHtml(imageUrl)}" placeholder="Paste PA-API image URL" data-affiliate-image="${escapeHtml(idea.imageKey)}">
+        </label>
+        <div class="affiliate-actions">
+          <a class="button button-light" href="${escapeHtml(url)}" target="_blank" rel="sponsored noreferrer">View on Amazon</a>
+          <button class="button button-dark" type="button" data-affiliate-idea="${index}">Use idea</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  list.querySelectorAll("[data-affiliate-idea]").forEach((button) => {
+    button.addEventListener("click", () => useAffiliateIdea(Number(button.dataset.affiliateIdea)));
+  });
+
+  list.querySelectorAll("[data-affiliate-image]").forEach((input) => {
+    input.addEventListener("input", () => {
+      state.associates = state.associates || {};
+      state.associates.images = state.associates.images || {};
+      const url = input.value.trim();
+      if (url) {
+        state.associates.images[input.dataset.affiliateImage] = {
+          url,
+          savedAt: new Date().toISOString()
+        };
+      } else {
+        delete state.associates.images[input.dataset.affiliateImage];
+      }
+      silentSave();
+    });
+    input.addEventListener("change", renderAffiliateIdeas);
+  });
+}
+
+function buildAffiliateUrl(query) {
+  const url = new URL("https://www.amazon.com/s");
+  url.searchParams.set("k", query);
+  const tag = String(state.associates?.tag || "").trim();
+  if (tag) url.searchParams.set("tag", tag);
+  return url.toString();
+}
+
+function freshAffiliateImageUrl(imageKey) {
+  return freshAmazonImageUrl(state.associates?.images?.[imageKey]);
+}
+
+function freshAmazonImageUrl(record) {
+  if (!record || typeof record !== "object") return "";
+  const savedAt = Date.parse(record.savedAt || "");
+  if (!record.url || Number.isNaN(savedAt) || Date.now() - savedAt > amazonImageMaxAgeMs) return "";
+  return record.url;
 }
 
 function renderInstructionSlides() {
@@ -491,6 +607,9 @@ function renderSteps() {
         input.value = step[field] || "";
         input.addEventListener("input", () => {
           step[field] = field === "quantity" ? Number(input.value || 1) : input.value;
+          if (field === "imageUrl") {
+            step.imageUrlSavedAt = step.imageUrl ? new Date().toISOString() : "";
+          }
           markSequenceDirty();
           renderMetrics();
           renderStatus();
@@ -499,11 +618,28 @@ function renderSteps() {
       });
 
       const urlInput = node.querySelector('[data-field="itemUrl"]');
+      const imageInput = node.querySelector('[data-field="imageUrl"]');
+      const imagePreview = node.querySelector("[data-image-preview]");
       const fillButton = node.querySelector(".fill-amazon-details");
       const fillFromUrl = () => populateAmazonFields(step, node);
+      const renderStepImage = () => {
+        if (imageInput.value.trim() !== step.imageUrl) {
+          step.imageUrl = imageInput.value.trim();
+          step.imageUrlSavedAt = step.imageUrl ? new Date().toISOString() : "";
+        }
+
+        const imageUrl = freshAmazonImageUrl({ url: step.imageUrl, savedAt: step.imageUrlSavedAt });
+        const emptyMessage = step.imageUrl && !imageUrl ? "Image link expired" : "No image added";
+        imagePreview.innerHTML = imageUrl
+          ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(step.itemName || "Gift image")}">`
+          : `<span>${emptyMessage}</span>`;
+        imagePreview.classList.toggle("is-empty", !imageUrl);
+      };
       urlInput.addEventListener("change", fillFromUrl);
       urlInput.addEventListener("blur", fillFromUrl);
+      imageInput.addEventListener("input", renderStepImage);
       fillButton.addEventListener("click", fillFromUrl);
+      renderStepImage();
 
       list.appendChild(node);
     });
@@ -727,6 +863,8 @@ function addStep() {
     itemName: "",
     asin: "",
     itemUrl: "",
+    imageUrl: "",
+    imageUrlSavedAt: "",
     quantity: 1,
     message: "Hi {{firstName}}, thought you might enjoy this. - {{owner}}",
     emailSubjectWhenSent: "",
@@ -737,6 +875,48 @@ function addStep() {
   });
   render();
   silentSave();
+}
+
+function useAffiliateIdea(index) {
+  const idea = affiliateIdeas[index];
+  if (!idea) return;
+
+  markSequenceDirty();
+  let step = state.steps.find((candidate) => !candidate.itemName && !candidate.asin && !candidate.itemUrl);
+  if (!step) {
+    step = {
+      id: uid(),
+      order: state.steps.length + 1,
+      name: `Gift ${state.steps.length + 1}`,
+      sendDate: addDays(state.steps.length * 7),
+      itemName: "",
+      asin: "",
+      itemUrl: "",
+      imageUrl: "",
+      imageUrlSavedAt: "",
+      quantity: 1,
+      message: "",
+      emailSubjectWhenSent: "",
+      emailBodyWhenSent: "",
+      emailSubjectWhenDelivered: "",
+      emailBodyWhenDelivered: "",
+      note: ""
+    };
+    state.steps.push(step);
+  }
+
+  step.itemName = idea.title;
+  step.itemUrl = buildAffiliateUrl(idea.query);
+  step.imageUrl = freshAffiliateImageUrl(idea.imageKey) || step.imageUrl || "";
+  step.imageUrlSavedAt = step.imageUrl ? new Date().toISOString() : "";
+  step.asin = "";
+  step.quantity = step.quantity || 1;
+  step.message = step.message || idea.message;
+  step.note = step.note || "Amazon Associates idea link";
+
+  render();
+  silentSave();
+  showToast(`Added ${idea.title} to the gift sequence.`);
 }
 
 function removeStep(id) {

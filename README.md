@@ -7,6 +7,7 @@ A local prototype for automating Amazon gift campaigns for prospect outreach.
 - Opens to a public product intro page before asking users to sign in.
 - Moves users through a protected sign-in and a short onboarding flow before showing the campaign process workspace.
 - Builds a multi-step gift sequence with send dates, ASINs or Amazon URLs, quantities, gift messages, and follow-up email copy.
+- Includes a connected Amazon Associates ideas page where you can add your Associates tag and generate affiliate-ready Amazon gift idea links.
 - Stores prospect names, shipping addresses, company data, owners, and readiness flags in the browser.
 - Requires a sequence confirmation before automation runs so gift/message edits are intentional.
 - Processes due gifts through `POST /api/orders/process`, creates deduped order records, and keeps existing sends from being queued twice.
@@ -85,6 +86,12 @@ The server verifies those credentials before setting a signed, HttpOnly session 
 The current app supports queue-only and sandbox-style processing. The `amazon-business-api` mode creates records marked `ready_for_live_connector` when credential fields are present, but it does not place live Amazon orders yet.
 
 To complete live ordering, connect the processing endpoint to the approved Amazon Business buying workflow for your account, then map each generated `amazonPayload` to that API's order creation request. Keeping this boundary explicit prevents accidental gift sends while campaign setup is still being tested.
+
+## Amazon Associates Links
+
+The gift sequence links to a connected `/ideas.html` page for Amazon Associates links. Add your Associates tag, review the generated Amazon URLs, and keep the on-screen disclosure visible anywhere those links are shown.
+
+For product images, use URLs from Amazon's approved Associates or Product Advertising API tools. Do not copy, download, or re-host product images from Amazon product pages.
 
 ## CSV Import Format
 

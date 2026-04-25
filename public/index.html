@@ -27,6 +27,7 @@
       <nav class="nav" aria-label="Primary">
         <a href="#guide">Guide</a>
         <a href="#sequence">Sequence</a>
+        <a href="/ideas.html">Ideas</a>
         <a href="#prospects">Prospects</a>
         <a href="#automation">Automation</a>
       </nav>
@@ -311,8 +312,9 @@
         <aside class="side-rail" aria-label="Workflow">
           <a href="#campaign">01 Campaign</a>
           <a href="#sequence">02 Gifts</a>
-          <a href="#prospects">03 Prospects</a>
-          <a href="#automation">04 Automate</a>
+          <a href="/ideas.html">03 Ideas</a>
+          <a href="#prospects">04 Prospects</a>
+          <a href="#automation">05 Automate</a>
         </aside>
 
         <div class="panels">
@@ -354,7 +356,10 @@
                 <p class="eyebrow">Gift sequence</p>
                 <h2>Choose the gifts and write the Amazon gift messages.</h2>
               </div>
-              <button class="button button-light" id="addStepButton" type="button">Add gift</button>
+              <div class="button-row">
+                <a class="button button-light" href="/ideas.html">Need ideas?</a>
+                <button class="button button-light" id="addStepButton" type="button">Add gift</button>
+              </div>
             </div>
             <div class="step-list" id="stepList"></div>
             <div class="sequence-footer">
@@ -518,6 +523,14 @@
               <button class="button button-light fill-amazon-details" type="button">Fill details</button>
             </div>
             <small class="field-hint amazon-lookup-status">Paste a product URL to fill ASIN and a product-name guess.</small>
+          </label>
+          <label class="full-span">
+            <span>Amazon product image URL</span>
+            <div class="gift-image-row">
+              <figure class="gift-image-preview is-empty" data-image-preview><span>No image added</span></figure>
+              <input data-field="imageUrl" type="url" placeholder="Paste official PA-API image URL">
+            </div>
+            <small class="field-hint">Use image URLs from Amazon's approved Associates or Product Advertising API tools.</small>
           </label>
           <label>
             <span>Quantity</span>

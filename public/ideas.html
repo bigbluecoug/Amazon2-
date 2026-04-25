@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gift Ideas | GiftFlow Studio</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="GiftFlow Studio home">
+        <span class="brand-mark">GF</span>
+        <span>GiftFlow</span>
+      </a>
+      <nav class="nav" aria-label="Ideas navigation">
+        <a href="/#sequence">Gifts</a>
+        <a href="/#prospects">Prospects</a>
+        <a href="/#automation">Automation</a>
+      </nav>
+      <a class="button button-dark" href="/#sequence">Back to gifts</a>
+    </header>
+
+    <main class="ideas-page">
+      <section class="ideas-hero">
+        <div>
+          <p class="eyebrow">Amazon Associates ideas</p>
+          <h1>Need ideas or suggestions?</h1>
+          <p class="lede">Browse quick gift suggestions, add your Associates tag, and send a selected idea back into the GiftFlow sequence.</p>
+        </div>
+      </section>
+
+      <section class="section ideas-workspace">
+        <div class="affiliate-ideas">
+          <div class="affiliate-copy">
+            <h2>Affiliate-ready gift links.</h2>
+            <p>As an Amazon Associate I earn from qualifying purchases. Add your tag once, then use these idea links when you want an affiliate-ready Amazon URL in the sequence.</p>
+          </div>
+          <label class="affiliate-tag-field">
+            <span>Associates tag</span>
+            <input id="affiliateTag" type="text" placeholder="yourtag-20">
+          </label>
+          <div class="affiliate-idea-grid" id="affiliateIdeaList"></div>
+        </div>
+        <p class="ideas-status" id="ideasStatus" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+
+    <script src="/ideas.js"></script>
+  </body>
+</html>
