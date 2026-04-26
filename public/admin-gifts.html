@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Edit Gift Ideas | GiftFlow Studio</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="GiftFlow Studio home">
+        <span class="brand-mark">GF</span>
+        <span>GiftFlow</span>
+      </a>
+      <nav class="nav" aria-label="Gift editor navigation">
+        <a href="/ideas.html">Ideas page</a>
+        <a href="/#sequence">Gift sequence</a>
+      </nav>
+      <a class="button button-dark" href="/ideas.html">View ideas</a>
+    </header>
+
+    <main class="ideas-page">
+      <section class="ideas-hero">
+        <div>
+          <p class="eyebrow">Backend gift catalog</p>
+          <h1>Edit Amazon Associates gifts.</h1>
+          <p class="lede">Only authorized catalog admins can add, update, or remove the gift ideas that appear on the public suggestions page.</p>
+        </div>
+      </section>
+
+      <section class="section ideas-workspace">
+        <div class="panel catalog-editor" id="catalogEditor" hidden>
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Catalog</p>
+              <h2>Gift suggestions</h2>
+            </div>
+            <div class="button-row">
+              <button class="button button-light" id="addGiftIdeaButton" type="button">Add gift</button>
+              <button class="button button-dark" id="saveGiftIdeasButton" type="button">Save catalog</button>
+            </div>
+          </div>
+          <div class="catalog-list" id="catalogList"></div>
+          <p class="ideas-status" id="catalogStatus" role="status" aria-live="polite"></p>
+        </div>
+        <div class="panel catalog-auth" id="catalogAuth">
+          <p class="eyebrow">Authorization required</p>
+          <h2>Sign in with an authorized account to edit gift suggestions.</h2>
+          <p class="lede">The ideas page is public, but catalog edits are restricted to approved emails.</p>
+          <div class="button-row">
+            <a class="button button-dark" href="/#landingHero">Sign in</a>
+            <a class="button button-light" href="/ideas.html">View ideas</a>
+          </div>
+          <p class="ideas-status warning" id="authStatus"></p>
+        </div>
+      </section>
+    </main>
+
+    <template id="catalogItemTemplate">
+      <article class="catalog-card">
+        <div class="catalog-card-heading">
+          <strong data-title-label>Gift idea</strong>
+          <button class="icon-button remove-catalog-item" type="button" title="Remove gift idea" aria-label="Remove gift idea">×</button>
+        </div>
+        <div class="form-grid two-col compact">
+          <label>
+            <span>Gift title</span>
+            <input data-field="title" type="text">
+          </label>
+          <label>
+            <span>Amazon search query</span>
+            <input data-field="query" type="text">
+          </label>
+          <label class="full-span">
+            <span>Product image URL</span>
+            <input data-field="imageUrl" type="url" placeholder="Optional PA-API image URL">
+          </label>
+          <label class="full-span">
+            <span>Gift message</span>
+            <textarea data-field="message" rows="3"></textarea>
+          </label>
+        </div>
+      </article>
+    </template>
+
+    <script src="/admin-gifts.js"></script>
+  </body>
+</html>

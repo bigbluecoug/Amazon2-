@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 define('GIFT_ROOT', __DIR__);
 define('GIFT_PUBLIC_ROOT', GIFT_ROOT . '/public');
+define('GIFT_DATA_ROOT', GIFT_ROOT . '/data');
+define('GIFT_IDEAS_FILE', GIFT_DATA_ROOT . '/gift-ideas.json');
 define('DEFAULT_AUTH_EMAIL', 'team@giftflow.local');
 define('DEFAULT_AUTH_PASSWORD', 'giftflow-demo');
 define('SESSION_COOKIE', 'giftflow_session');
@@ -66,6 +68,14 @@ function auth_name(): string
     return trim(env_value('AUTH_NAME', 'GiftFlow Team'));
 }
 
+function gift_idea_admin_emails(): array
+{
+    $raw = env_value('GIFT_IDEA_ADMIN_EMAILS', auth_email());
+    return array_values(array_filter(array_map(function (string $email): string {
+        return strtolower(trim($email));
+    }, explode(',', $raw))));
+}
+
 function session_secret(): string
 {
     return env_value('SESSION_SECRET', 'development-only-change-me');
@@ -86,6 +96,84 @@ function json_response(array $body, int $status = 200): void
     http_response_code($status);
     header('Content-Type: application/json');
     echo json_encode($body, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+}
+
+function default_gift_ideas(): array
+{
+    return [
+        [
+            'title' => 'Premium coffee sampler',
+            'query' => 'premium coffee sampler gift box',
+            'imageUrl' => '',
+            'message' => 'Hi {{firstName}}, thought this would make your next planning session a little better. - {{owner}}',
+        ],
+        [
+            'title' => 'Desk notebook set',
+            'query' => 'premium desk notebook set',
+            'imageUrl' => '',
+            'message' => 'Hi {{firstName}}, a useful place for the next round of big ideas. - {{owner}}',
+        ],
+        [
+            'title' => 'Insulated desk tumbler',
+            'query' => 'insulated desk tumbler gift',
+            'imageUrl' => '',
+            'message' => 'Hi {{firstName}}, hope this keeps the good ideas fueled. - {{owner}}',
+        ],
+        [
+            'title' => 'Wireless charging stand',
+            'query' => 'wireless charging stand desk',
+            'imageUrl' => '',
+            'message' => 'Hi {{firstName}}, a small desk upgrade for the workday. - {{owner}}',
+        ],
+    ];
+}
+
+function sanitize_gift_idea($idea): array
+{
+    $idea = is_array($idea) ? $idea : [];
+    return [
+        'title' => trim((string) ($idea['title'] ?? '')),
+        'query' => trim((string) ($idea['query'] ?? '')),
+        'imageUrl' => trim((string) ($idea['imageUrl'] ?? '')),
+        'imageUrlSavedAt' => trim((string) ($idea['imageUrlSavedAt'] ?? '')),
+        'message' => trim((string) ($idea['message'] ?? '')),
+    ];
+}
+
+function read_gift_ideas(): array
+{
+    if (!is_file(GIFT_IDEAS_FILE) || !is_readable(GIFT_IDEAS_FILE)) {
+        return default_gift_ideas();
+    }
+
+    $decoded = json_decode((string) file_get_contents(GIFT_IDEAS_FILE), true);
+    if (!is_array($decoded)) {
+        return default_gift_ideas();
+    }
+
+    $ideas = array_values(array_filter(array_map('sanitize_gift_idea', $decoded), function (array $idea): bool {
+        return present($idea['title']) && present($idea['query']);
+    }));
+
+    return count($ideas) ? $ideas : default_gift_ideas();
+}
+
+function write_gift_ideas(array $ideas): array
+{
+    $cleaned = array_values(array_filter(array_map('sanitize_gift_idea', $ideas), function (array $idea): bool {
+        return present($idea['title']) && present($idea['query']);
+    }));
+
+    if (!count($cleaned)) {
+        throw new InvalidArgumentException('Add at least one gift idea with a title and Amazon search query.');
+    }
+
+    if (!is_dir(GIFT_DATA_ROOT)) {
+        mkdir(GIFT_DATA_ROOT, 0775, true);
+    }
+
+    file_put_contents(GIFT_IDEAS_FILE, json_encode($cleaned, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL);
+    return $cleaned;
 }
 
 function base64url_encode(string $value): string
@@ -206,6 +294,30 @@ function require_user(): ?array
     }
 
     json_response(['ok' => false, 'errors' => ['Sign in to continue.']], 401);
+    return null;
+}
+
+function gift_idea_admin($user): bool
+{
+    if (!is_array($user)) {
+        return false;
+    }
+
+    return in_array(strtolower(trim((string) ($user['email'] ?? ''))), gift_idea_admin_emails(), true);
+}
+
+function require_gift_idea_admin(): ?array
+{
+    $user = require_user();
+    if ($user === null) {
+        return null;
+    }
+
+    if (gift_idea_admin($user)) {
+        return $user;
+    }
+
+    json_response(['ok' => false, 'errors' => ['You are not authorized to edit gift suggestions.']], 403);
     return null;
 }
 
@@ -449,12 +561,16 @@ function handle_request(): void
     }
 
     if ($path === '/api/auth/config') {
+        $user = current_user();
         json_response([
             'ok' => true,
             'configured' => present(auth_email()) && present(auth_password()),
             'authMode' => 'password',
             'usingDefaultCredentials' => using_default_credentials(),
-            'user' => current_user(),
+            'user' => $user,
+            'permissions' => [
+                'giftIdeaAdmin' => gift_idea_admin($user),
+            ],
         ]);
         return;
     }
@@ -506,6 +622,37 @@ function handle_request(): void
     if ($path === '/api/auth/logout') {
         clear_session_cookie();
         json_response(['ok' => true]);
+        return;
+    }
+
+    if ($path === '/api/gift-ideas') {
+        $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        if ($method === 'GET') {
+            json_response(['ok' => true, 'ideas' => read_gift_ideas()]);
+            return;
+        }
+
+        if ($method !== 'POST' && $method !== 'PUT') {
+            json_response(['ok' => false, 'errors' => ['Method not allowed.']], 405);
+            return;
+        }
+
+        if (require_gift_idea_admin() === null) {
+            return;
+        }
+
+        try {
+            $payload = read_json_body();
+            if (!isset($payload['ideas']) || !is_array($payload['ideas'])) {
+                json_response(['ok' => false, 'errors' => ['Missing required field: ideas']], 422);
+                return;
+            }
+            json_response(['ok' => true, 'ideas' => write_gift_ideas($payload['ideas'])]);
+        } catch (InvalidArgumentException $error) {
+            json_response(['ok' => false, 'errors' => [$error->getMessage()]], 400);
+        } catch (Throwable $error) {
+            json_response(['ok' => false, 'errors' => [$error->getMessage()]], 422);
+        }
         return;
     }
 

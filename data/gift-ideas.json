@@ -1,0 +1,26 @@
+[
+  {
+    "title": "Premium coffee sampler",
+    "query": "premium coffee sampler gift box",
+    "imageUrl": "",
+    "message": "Hi {{firstName}}, thought this would make your next planning session a little better. - {{owner}}"
+  },
+  {
+    "title": "Desk notebook set",
+    "query": "premium desk notebook set",
+    "imageUrl": "",
+    "message": "Hi {{firstName}}, a useful place for the next round of big ideas. - {{owner}}"
+  },
+  {
+    "title": "Insulated desk tumbler",
+    "query": "insulated desk tumbler gift",
+    "imageUrl": "",
+    "message": "Hi {{firstName}}, hope this keeps the good ideas fueled. - {{owner}}"
+  },
+  {
+    "title": "Wireless charging stand",
+    "query": "wireless charging stand desk",
+    "imageUrl": "",
+    "message": "Hi {{firstName}}, a small desk upgrade for the workday. - {{owner}}"
+  }
+]

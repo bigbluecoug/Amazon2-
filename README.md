@@ -7,7 +7,7 @@ A local prototype for automating Amazon gift campaigns for prospect outreach.
 - Opens to a public product intro page before asking users to sign in.
 - Moves users through a protected sign-in and a short onboarding flow before showing the campaign process workspace.
 - Builds a multi-step gift sequence with send dates, ASINs or Amazon URLs, quantities, gift messages, and follow-up email copy.
-- Includes a connected Amazon Associates ideas page where you can add your Associates tag and generate affiliate-ready Amazon gift idea links.
+- Includes a connected Amazon Associates ideas page and backend-editable gift catalog for affiliate-ready gift links.
 - Stores prospect names, shipping addresses, company data, owners, and readiness flags in the browser.
 - Requires a sequence confirmation before automation runs so gift/message edits are intentional.
 - Processes due gifts through `POST /api/orders/process`, creates deduped order records, and keeps existing sends from being queued twice.
@@ -90,6 +90,14 @@ To complete live ordering, connect the processing endpoint to the approved Amazo
 ## Amazon Associates Links
 
 The gift sequence links to a connected `/ideas.html` page for Amazon Associates links. Add your Associates tag, review the generated Amazon URLs, and keep the on-screen disclosure visible anywhere those links are shown.
+
+Gift suggestions are loaded from `data/gift-ideas.json`. Signed-in users can edit the backend catalog at `/admin-gifts.html`, which saves through `POST /api/gift-ideas`.
+
+Catalog edits are restricted to approved admin emails. By default, the configured `AUTH_EMAIL` can edit gifts. To allow more people, set a comma-separated list:
+
+```bash
+GIFT_IDEA_ADMIN_EMAILS="you@company.com,teammate@company.com"
+```
 
 For product images, use URLs from Amazon's approved Associates or Product Advertising API tools. Do not copy, download, or re-host product images from Amazon product pages.
 

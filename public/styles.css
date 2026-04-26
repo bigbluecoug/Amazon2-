@@ -397,6 +397,7 @@ h3 {
 }
 
 .ideas-page {
+  --panel-color: #1f9d68;
   min-height: 100vh;
   background: var(--paper);
 }
@@ -409,6 +410,11 @@ h3 {
   max-width: 820px;
 }
 
+.ideas-hero {
+  border-bottom: 10px solid var(--panel-color);
+  background: color-mix(in srgb, var(--panel-color) 8%, var(--paper));
+}
+
 .ideas-workspace {
   padding-top: 0;
 }
@@ -417,6 +423,38 @@ h3 {
   margin: 16px 0 0;
   color: var(--muted);
   font-weight: 900;
+}
+
+.ideas-status.warning {
+  color: var(--coral);
+}
+
+.catalog-editor {
+  max-width: 1120px;
+}
+
+.catalog-list {
+  display: grid;
+  gap: 14px;
+}
+
+.catalog-card {
+  padding: 18px;
+  border: 1px solid rgba(13, 13, 13, 0.1);
+  border-radius: 22px;
+  background: #fbfaf6;
+}
+
+.catalog-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.catalog-card-heading strong {
+  font-size: 18px;
 }
 
 .button,
@@ -860,13 +898,35 @@ h3 {
 }
 
 .side-rail a {
+  --step-color: var(--orange);
   padding: 12px 14px;
-  border: 1px solid rgba(13, 13, 13, 0.1);
+  border: 1px solid color-mix(in srgb, var(--step-color) 44%, rgba(13, 13, 13, 0.08));
+  border-left: 6px solid var(--step-color);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.52);
+  background: color-mix(in srgb, var(--step-color) 12%, #fff);
   color: rgba(13, 13, 13, 0.68);
   font-size: 13px;
   font-weight: 900;
+}
+
+.side-rail a:nth-child(1) {
+  --step-color: #4c6fff;
+}
+
+.side-rail a:nth-child(2) {
+  --step-color: #ff9f2f;
+}
+
+.side-rail a:nth-child(3) {
+  --step-color: #1f9d68;
+}
+
+.side-rail a:nth-child(4) {
+  --step-color: #ff6b57;
+}
+
+.side-rail a:nth-child(5) {
+  --step-color: #7c5cff;
 }
 
 .panels {
@@ -875,9 +935,56 @@ h3 {
 }
 
 .panel {
+  --panel-color: var(--orange);
+  position: relative;
   padding: clamp(20px, 3vw, 36px);
+  border: 1px solid color-mix(in srgb, var(--panel-color) 34%, rgba(13, 13, 13, 0.08));
   border-radius: 30px;
+  background:
+    linear-gradient(90deg, var(--panel-color) 0 10px, transparent 10px),
+    color-mix(in srgb, var(--panel-color) 8%, #fff);
   box-shadow: 0 20px 70px rgba(13, 13, 13, 0.06);
+}
+
+.panel::before {
+  content: "";
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 70px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--panel-color);
+}
+
+.panel-campaign {
+  --panel-color: #4c6fff;
+}
+
+.panel-sequence {
+  --panel-color: #ff9f2f;
+}
+
+.panel-prospects {
+  --panel-color: #ff6b57;
+}
+
+.panel-automation {
+  --panel-color: #7c5cff;
+}
+
+.panel-step-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 32px;
+  height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--panel-color, var(--orange));
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .panel-heading {

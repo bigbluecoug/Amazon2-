@@ -1,29 +1,17 @@
 const storeKey = "giftflow-studio-state-v1";
 const amazonImageMaxAgeMs = 24 * 60 * 60 * 1000;
-const affiliateIdeas = [
+const fallbackIdeas = [
   {
     title: "Premium coffee sampler",
-    imageKey: "coffeeSampler",
     query: "premium coffee sampler gift box",
+    imageUrl: "",
     message: "Hi {{firstName}}, thought this would make your next planning session a little better. - {{owner}}"
   },
   {
     title: "Desk notebook set",
-    imageKey: "notebookSet",
     query: "premium desk notebook set",
+    imageUrl: "",
     message: "Hi {{firstName}}, a useful place for the next round of big ideas. - {{owner}}"
-  },
-  {
-    title: "Insulated desk tumbler",
-    imageKey: "deskTumbler",
-    query: "insulated desk tumbler gift",
-    message: "Hi {{firstName}}, hope this keeps the good ideas fueled. - {{owner}}"
-  },
-  {
-    title: "Wireless charging stand",
-    imageKey: "chargingStand",
-    query: "wireless charging stand desk",
-    message: "Hi {{firstName}}, a small desk upgrade for the workday. - {{owner}}"
   }
 ];
 
@@ -35,27 +23,19 @@ const addDays = (days) => {
 const uid = () => crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 
 let state = loadState();
+let giftIdeas = fallbackIdeas;
 
 function loadState() {
   const raw = localStorage.getItem(storeKey);
-  if (!raw) {
-    return {
-      associates: { tag: "", images: {} },
-      steps: []
-    };
-  }
+  if (!raw) return { associates: { tag: "" }, steps: [] };
 
   try {
     const parsed = JSON.parse(raw);
-    parsed.associates = parsed.associates || { tag: "", images: {} };
-    parsed.associates.images = parsed.associates.images || {};
+    parsed.associates = parsed.associates || { tag: "" };
     parsed.steps = parsed.steps || [];
     return parsed;
   } catch (_error) {
-    return {
-      associates: { tag: "", images: {} },
-      steps: []
-    };
+    return { associates: { tag: "" }, steps: [] };
   }
 }
 
@@ -73,15 +53,12 @@ function escapeHtml(value) {
   return div.innerHTML;
 }
 
-function freshAmazonImageUrl(record) {
-  if (!record || typeof record !== "object") return "";
-  const savedAt = Date.parse(record.savedAt || "");
-  if (!record.url || Number.isNaN(savedAt) || Date.now() - savedAt > amazonImageMaxAgeMs) return "";
-  return record.url;
-}
-
-function freshAffiliateImageUrl(imageKey) {
-  return freshAmazonImageUrl(state.associates?.images?.[imageKey]);
+function freshAmazonImageUrl(url, savedAt) {
+  if (!url) return "";
+  if (!savedAt) return url;
+  const savedTime = Date.parse(savedAt);
+  if (Number.isNaN(savedTime) || Date.now() - savedTime > amazonImageMaxAgeMs) return "";
+  return url;
 }
 
 function buildAffiliateUrl(query) {
@@ -92,27 +69,36 @@ function buildAffiliateUrl(query) {
   return url.toString();
 }
 
+async function loadGiftIdeas() {
+  try {
+    const response = await fetch("/api/gift-ideas", { credentials: "same-origin" });
+    const payload = await response.json();
+    if (payload.ok && Array.isArray(payload.ideas) && payload.ideas.length) {
+      giftIdeas = payload.ideas;
+    }
+  } catch (_error) {
+    giftIdeas = fallbackIdeas;
+  }
+}
+
 function renderAffiliateIdeas() {
   const tagInput = byId("affiliateTag");
   tagInput.value = state.associates?.tag || "";
 
   const list = byId("affiliateIdeaList");
-  list.innerHTML = affiliateIdeas.map((idea, index) => {
+  list.innerHTML = giftIdeas.map((idea, index) => {
     const url = buildAffiliateUrl(idea.query);
-    const imageUrl = freshAffiliateImageUrl(idea.imageKey);
+    const imageUrl = freshAmazonImageUrl(idea.imageUrl, idea.imageUrlSavedAt);
     return `
       <article class="affiliate-idea-card">
         <figure class="affiliate-idea-image ${imageUrl ? "" : "is-empty"}">
-          ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(idea.title)}">` : "<span>Add Amazon image URL</span>"}
+          ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(idea.title)}">` : "<span>Amazon Associates gift</span>"}
         </figure>
         <div>
           <span>Idea ${index + 1}</span>
           <strong>${escapeHtml(idea.title)}</strong>
         </div>
-        <label class="affiliate-image-field">
-          <span>Amazon image URL</span>
-          <input type="url" value="${escapeHtml(imageUrl)}" placeholder="Paste PA-API image URL" data-affiliate-image="${escapeHtml(idea.imageKey)}">
-        </label>
+        <p>${escapeHtml(idea.query)}</p>
         <div class="affiliate-actions">
           <a class="button button-light" href="${escapeHtml(url)}" target="_blank" rel="sponsored noreferrer">View on Amazon</a>
           <button class="button button-dark" type="button" data-affiliate-idea="${index}">Use idea</button>
@@ -124,27 +110,10 @@ function renderAffiliateIdeas() {
   list.querySelectorAll("[data-affiliate-idea]").forEach((button) => {
     button.addEventListener("click", () => useAffiliateIdea(Number(button.dataset.affiliateIdea)));
   });
-
-  list.querySelectorAll("[data-affiliate-image]").forEach((input) => {
-    input.addEventListener("input", () => {
-      state.associates.images = state.associates.images || {};
-      const url = input.value.trim();
-      if (url) {
-        state.associates.images[input.dataset.affiliateImage] = {
-          url,
-          savedAt: new Date().toISOString()
-        };
-      } else {
-        delete state.associates.images[input.dataset.affiliateImage];
-      }
-      saveState();
-    });
-    input.addEventListener("change", renderAffiliateIdeas);
-  });
 }
 
 function useAffiliateIdea(index) {
-  const idea = affiliateIdeas[index];
+  const idea = giftIdeas[index];
   if (!idea) return;
 
   let step = state.steps.find((candidate) => !candidate.itemName && !candidate.asin && !candidate.itemUrl);
@@ -172,11 +141,11 @@ function useAffiliateIdea(index) {
 
   step.itemName = idea.title;
   step.itemUrl = buildAffiliateUrl(idea.query);
-  step.imageUrl = freshAffiliateImageUrl(idea.imageKey) || step.imageUrl || "";
+  step.imageUrl = freshAmazonImageUrl(idea.imageUrl, idea.imageUrlSavedAt) || step.imageUrl || "";
   step.imageUrlSavedAt = step.imageUrl ? new Date().toISOString() : "";
   step.asin = "";
   step.quantity = step.quantity || 1;
-  step.message = step.message || idea.message;
+  step.message = step.message || idea.message || "Hi {{firstName}}, thought you might enjoy this. - {{owner}}";
   step.note = step.note || "Amazon Associates idea link";
   state.execution = state.execution || {};
   state.execution.confirmedSequenceSignature = "";
@@ -189,10 +158,9 @@ function useAffiliateIdea(index) {
 
 byId("affiliateTag").addEventListener("input", (event) => {
   state.associates = state.associates || {};
-  state.associates.images = state.associates.images || {};
   state.associates.tag = event.target.value.trim();
   saveState();
   renderAffiliateIdeas();
 });
 
-renderAffiliateIdeas();
+loadGiftIdeas().then(renderAffiliateIdeas);

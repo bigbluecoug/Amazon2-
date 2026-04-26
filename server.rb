@@ -8,12 +8,15 @@ require "webrick"
 
 ROOT = File.expand_path(__dir__)
 PUBLIC_ROOT = File.join(ROOT, "public")
+DATA_ROOT = File.join(ROOT, "data")
+GIFT_IDEAS_FILE = File.join(DATA_ROOT, "gift-ideas.json")
 PORT = Integer(ENV.fetch("PORT", "4174"))
 DEFAULT_AUTH_EMAIL = "team@giftflow.local"
 DEFAULT_AUTH_PASSWORD = "giftflow-demo"
 AUTH_EMAIL = ENV.fetch("AUTH_EMAIL", DEFAULT_AUTH_EMAIL).strip.downcase
 AUTH_PASSWORD = ENV.fetch("AUTH_PASSWORD", DEFAULT_AUTH_PASSWORD)
 AUTH_NAME = ENV.fetch("AUTH_NAME", "GiftFlow Team").strip
+GIFT_IDEA_ADMIN_EMAILS = ENV.fetch("GIFT_IDEA_ADMIN_EMAILS", AUTH_EMAIL).split(",").map { |email| email.strip.downcase }.reject(&:empty?)
 USING_DEFAULT_CREDENTIALS = ENV["AUTH_EMAIL"].nil? || ENV["AUTH_PASSWORD"].nil?
 SESSION_SECRET = ENV.fetch("SESSION_SECRET", "development-only-change-me")
 SESSION_COOKIE = "giftflow_session"
@@ -83,6 +86,65 @@ def json_response(response, body, status = 200)
   response.status = status
   response["Content-Type"] = "application/json"
   response.body = JSON.pretty_generate(body)
+end
+
+def default_gift_ideas
+  [
+    {
+      "title" => "Premium coffee sampler",
+      "query" => "premium coffee sampler gift box",
+      "imageUrl" => "",
+      "message" => "Hi {{firstName}}, thought this would make your next planning session a little better. - {{owner}}"
+    },
+    {
+      "title" => "Desk notebook set",
+      "query" => "premium desk notebook set",
+      "imageUrl" => "",
+      "message" => "Hi {{firstName}}, a useful place for the next round of big ideas. - {{owner}}"
+    },
+    {
+      "title" => "Insulated desk tumbler",
+      "query" => "insulated desk tumbler gift",
+      "imageUrl" => "",
+      "message" => "Hi {{firstName}}, hope this keeps the good ideas fueled. - {{owner}}"
+    },
+    {
+      "title" => "Wireless charging stand",
+      "query" => "wireless charging stand desk",
+      "imageUrl" => "",
+      "message" => "Hi {{firstName}}, a small desk upgrade for the workday. - {{owner}}"
+    }
+  ]
+end
+
+def sanitize_gift_idea(idea)
+  {
+    "title" => idea.fetch("title", "").to_s.strip,
+    "query" => idea.fetch("query", "").to_s.strip,
+    "imageUrl" => idea.fetch("imageUrl", "").to_s.strip,
+    "imageUrlSavedAt" => idea.fetch("imageUrlSavedAt", "").to_s.strip,
+    "message" => idea.fetch("message", "").to_s.strip
+  }
+end
+
+def read_gift_ideas
+  return default_gift_ideas unless File.file?(GIFT_IDEAS_FILE)
+
+  parsed = JSON.parse(File.read(GIFT_IDEAS_FILE))
+  return default_gift_ideas unless parsed.is_a?(Array)
+
+  parsed.map { |idea| sanitize_gift_idea(idea) }.select { |idea| present?(idea["title"]) && present?(idea["query"]) }
+rescue JSON::ParserError
+  default_gift_ideas
+end
+
+def write_gift_ideas(ideas)
+  cleaned = ideas.map { |idea| sanitize_gift_idea(idea) }.select { |idea| present?(idea["title"]) && present?(idea["query"]) }
+  raise "Add at least one gift idea with a title and Amazon search query." if cleaned.empty?
+
+  Dir.mkdir(DATA_ROOT) unless Dir.exist?(DATA_ROOT)
+  File.write(GIFT_IDEAS_FILE, JSON.pretty_generate(cleaned) + "\n")
+  cleaned
 end
 
 def base64url_encode(value)
@@ -167,6 +229,19 @@ def require_user(request, response)
   return user if user
 
   json_response(response, { ok: false, errors: ["Sign in to continue."] }, 401)
+  nil
+end
+
+def gift_idea_admin?(user)
+  !!(user && GIFT_IDEA_ADMIN_EMAILS.include?(user.fetch("email", "").to_s.strip.downcase))
+end
+
+def require_gift_idea_admin(request, response)
+  user = require_user(request, response)
+  return nil unless user
+  return user if gift_idea_admin?(user)
+
+  json_response(response, { ok: false, errors: ["You are not authorized to edit gift suggestions."] }, 403)
   nil
 end
 
@@ -311,12 +386,16 @@ server.mount_proc("/api/health") do |_request, response|
 end
 
 server.mount_proc("/api/auth/config") do |request, response|
+  user = current_user(request)
   json_response(response, {
     ok: true,
     configured: present?(AUTH_EMAIL) && present?(AUTH_PASSWORD),
     authMode: "password",
     usingDefaultCredentials: USING_DEFAULT_CREDENTIALS,
-    user: current_user(request)
+    user: user,
+    permissions: {
+      giftIdeaAdmin: gift_idea_admin?(user)
+    }
   })
 end
 
@@ -362,6 +441,34 @@ end
 server.mount_proc("/api/auth/logout") do |_request, response|
   response["Set-Cookie"] = clear_session_cookie
   json_response(response, { ok: true })
+end
+
+server.mount_proc("/api/gift-ideas") do |request, response|
+  if request.request_method == "GET"
+    json_response(response, { ok: true, ideas: read_gift_ideas })
+    next
+  end
+
+  unless %w[POST PUT].include?(request.request_method)
+    json_response(response, { ok: false, errors: ["Method not allowed."] }, 405)
+    next
+  end
+
+  next unless require_gift_idea_admin(request, response)
+
+  begin
+    payload = JSON.parse(request.body.to_s)
+    ideas = payload.fetch("ideas")
+    raise "Ideas must be an array." unless ideas.is_a?(Array)
+
+    json_response(response, { ok: true, ideas: write_gift_ideas(ideas) })
+  rescue JSON::ParserError
+    json_response(response, { ok: false, errors: ["Request body must be valid JSON."] }, 400)
+  rescue KeyError => error
+    json_response(response, { ok: false, errors: ["Missing required field: #{error.key}"] }, 422)
+  rescue StandardError => error
+    json_response(response, { ok: false, errors: [error.message] }, 422)
+  end
 end
 
 server.mount_proc("/api/orders/process") do |request, response|
