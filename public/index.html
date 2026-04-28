@@ -454,6 +454,10 @@
                 <span>Endpoint</span>
                 <input id="amazonEndpoint" type="url" placeholder="https://api.business.amazon.com">
               </label>
+              <div class="amazon-connect-row full-span">
+                <button class="button button-dark" id="connectAmazonButton" type="button">Connect Amazon Business</button>
+                <p id="amazonConnectionStatus">Add Amazon Business app settings on the server, then connect to receive a refresh token.</p>
+              </div>
               <label class="full-span">
                 <span>Shipping defaults</span>
                 <textarea id="shippingDefaults" rows="3" placeholder="Gift wrap, business account, delivery instructions"></textarea>
@@ -476,17 +480,17 @@
                 <article>
                   <span>03</span>
                   <strong>Copy the Client ID.</strong>
-                  <p>Open the app credentials in SPP and copy the Client ID into this form. Keep the client secret private; it is only needed by the secure backend token exchange.</p>
+                  <p>Open the app credentials in SPP and add the application ID, client ID, and client secret to Forge environment variables. Keep the client secret on the server only.</p>
                 </article>
                 <article>
                   <span>04</span>
                   <strong>Authorize the app as an Amazon Business admin.</strong>
-                  <p>Use the authorization URL for your Amazon Business marketplace, sign in as the Business account admin, select Allow, and copy the short-lived OAuth code from the redirect URL.</p>
+                  <p>Click Connect Amazon Business, sign in as the Amazon Business admin, and select Allow. GiftFlow receives the short-lived OAuth code on the callback URL.</p>
                 </article>
                 <article>
                   <span>05</span>
                   <strong>Exchange the OAuth code for the refresh token.</strong>
-                  <p>Post the OAuth code, Client ID, client secret, and redirect URI to Amazon's LWA token endpoint. Save the returned refresh_token here; access tokens expire quickly, but the refresh token is used to request new access tokens.</p>
+                  <p>The backend exchanges the OAuth code with Amazon Login With Amazon and fills the refresh token here. Access tokens expire quickly, but the refresh token can request new access tokens.</p>
                 </article>
                 <article>
                   <span>Sandbox</span>

@@ -52,12 +52,22 @@ GOOGLE_STATE_MAX_AGE = 600
 GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo"
+AMAZON_OAUTH_STATE_COOKIE = "giftflow_amazon_oauth_state"
+AMAZON_OAUTH_STATE_MAX_AGE = 600
+AMAZON_LWA_TOKEN_ENDPOINT = "https://api.amazon.com/auth/O2/token"
 GOOGLE_CLIENT_ID = ENV.fetch("GOOGLE_CLIENT_ID", "").strip
 GOOGLE_CLIENT_SECRET = ENV.fetch("GOOGLE_CLIENT_SECRET", "").strip
 GOOGLE_REDIRECT_URI = ENV.fetch("GOOGLE_REDIRECT_URI", "").strip
 GOOGLE_ALLOWED_EMAILS = ENV.fetch("GOOGLE_ALLOWED_EMAILS", AUTH_EMAIL).split(",").map { |email| email.strip.downcase }.reject(&:empty?)
 GOOGLE_ALLOWED_DOMAINS = ENV.fetch("GOOGLE_ALLOWED_DOMAINS", "").split(",").map { |domain| domain.strip.downcase.delete_prefix("@") }.reject(&:empty?)
 GOOGLE_LOGIN_ENABLED = ENV.fetch("ENABLE_GOOGLE_LOGIN", "false").strip.downcase == "true"
+AMAZON_BUSINESS_APPLICATION_ID = ENV.fetch("AMAZON_BUSINESS_APPLICATION_ID", "").strip
+AMAZON_BUSINESS_CLIENT_ID = ENV.fetch("AMAZON_BUSINESS_CLIENT_ID", "").strip
+AMAZON_BUSINESS_CLIENT_SECRET = ENV.fetch("AMAZON_BUSINESS_CLIENT_SECRET", "").strip
+AMAZON_BUSINESS_REDIRECT_URI = ENV.fetch("AMAZON_BUSINESS_REDIRECT_URI", "").strip
+AMAZON_BUSINESS_MARKETPLACE_URL = ENV.fetch("AMAZON_BUSINESS_MARKETPLACE_URL", "https://www.amazon.com").strip.delete_suffix("/")
+AMAZON_BUSINESS_MARKETPLACE_ID = ENV.fetch("AMAZON_BUSINESS_MARKETPLACE_ID", "ATVPDKIKX0DER").strip
+AMAZON_BUSINESS_API_ENDPOINT = ENV.fetch("AMAZON_BUSINESS_API_ENDPOINT", "https://api.business.amazon.com").strip.delete_suffix("/")
 
 MIME_TYPES = WEBrick::HTTPUtils::DefaultMimeTypes.merge(
   "js" => "application/javascript",
@@ -371,6 +381,18 @@ def google_login_configured?
     (GOOGLE_ALLOWED_EMAILS.any? || GOOGLE_ALLOWED_DOMAINS.any?)
 end
 
+def amazon_oauth_missing_settings
+  missing = []
+  missing << "AMAZON_BUSINESS_APPLICATION_ID" unless present?(AMAZON_BUSINESS_APPLICATION_ID)
+  missing << "AMAZON_BUSINESS_CLIENT_ID" unless present?(AMAZON_BUSINESS_CLIENT_ID)
+  missing << "AMAZON_BUSINESS_CLIENT_SECRET" unless present?(AMAZON_BUSINESS_CLIENT_SECRET)
+  missing
+end
+
+def amazon_oauth_configured?
+  amazon_oauth_missing_settings.empty?
+end
+
 def request_origin(request)
   proto = request["x-forwarded-proto"].to_s.split(",").first.to_s.strip
   proto = request.ssl? ? "https" : "http" if proto.empty?
@@ -382,6 +404,10 @@ end
 
 def google_redirect_uri(request)
   GOOGLE_REDIRECT_URI.empty? ? "#{request_origin(request)}/api/auth/google/callback" : GOOGLE_REDIRECT_URI
+end
+
+def amazon_redirect_uri(request)
+  AMAZON_BUSINESS_REDIRECT_URI.empty? ? "#{request_origin(request)}/api/amazon/oauth/callback" : AMAZON_BUSINESS_REDIRECT_URI
 end
 
 def google_authorization_url(state, request)
@@ -397,12 +423,30 @@ def google_authorization_url(state, request)
   uri.to_s
 end
 
+def amazon_authorization_url(state, request)
+  uri = URI("#{AMAZON_BUSINESS_MARKETPLACE_URL}/b2b/abws/oauth")
+  uri.query = URI.encode_www_form(
+    state: state,
+    redirect_uri: amazon_redirect_uri(request),
+    applicationId: AMAZON_BUSINESS_APPLICATION_ID
+  )
+  uri.to_s
+end
+
 def google_state_cookie(state)
   "#{GOOGLE_STATE_COOKIE}=#{state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=#{GOOGLE_STATE_MAX_AGE}"
 end
 
 def clear_google_state_cookie
   "#{GOOGLE_STATE_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+end
+
+def amazon_oauth_state_cookie(state)
+  "#{AMAZON_OAUTH_STATE_COOKIE}=#{state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=#{AMAZON_OAUTH_STATE_MAX_AGE}"
+end
+
+def clear_amazon_oauth_state_cookie
+  "#{AMAZON_OAUTH_STATE_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
 end
 
 def redirect_response(response, location)
@@ -427,13 +471,13 @@ def http_json_request(method, url, headers = {}, body = nil)
 
   payload = JSON.parse(response.body.to_s)
   unless response.is_a?(Net::HTTPSuccess)
-    raise(payload["error_description"] || payload["error"] || "Google sign-in failed.")
+    raise(payload["error_description"] || payload["error"] || "OAuth request failed.")
   end
   payload
 rescue JSON::ParserError
-  raise "Google returned an unreadable response."
+  raise "OAuth provider returned an unreadable response."
 rescue Errno::ECONNREFUSED, SocketError, Net::OpenTimeout, Net::ReadTimeout
-  raise "Google sign-in could not reach Google. Check outbound HTTPS from the server."
+  raise "OAuth request could not reach the provider. Check outbound HTTPS from the server."
 end
 
 def exchange_google_code(code, request)
@@ -449,6 +493,85 @@ def exchange_google_code(code, request)
       grant_type: "authorization_code"
     )
   )
+end
+
+def exchange_amazon_oauth_code(code, request)
+  http_json_request(
+    "POST",
+    AMAZON_LWA_TOKEN_ENDPOINT,
+    { "Content-Type" => "application/x-www-form-urlencoded" },
+    URI.encode_www_form(
+      grant_type: "authorization_code",
+      code: code,
+      client_id: AMAZON_BUSINESS_CLIENT_ID,
+      client_secret: AMAZON_BUSINESS_CLIENT_SECRET,
+      redirect_uri: amazon_redirect_uri(request)
+    )
+  )
+end
+
+def amazon_oauth_callback_payload(request)
+  raise "Amazon Business OAuth is not configured. Set the Amazon Business application ID, client ID, and client secret on the server." unless amazon_oauth_configured?
+
+  expected_state = request_cookies(request)[AMAZON_OAUTH_STATE_COOKIE].to_s
+  actual_state = request.query["state"].to_s
+  raise "Amazon authorization expired. Try connecting again." if expected_state.empty? || actual_state.empty? || !secure_compare(expected_state, actual_state)
+  raise "Amazon authorization was canceled or denied." if present?(request.query["error"])
+
+  code = request.query["code"].to_s.strip
+  raise "Amazon did not return an OAuth code." if code.empty?
+
+  token = exchange_amazon_oauth_code(code, request)
+  refresh_token = token.fetch("refresh_token", "").to_s.strip
+  raise "Amazon did not return a refresh token." if refresh_token.empty?
+
+  {
+    type: "giftflow-amazon-oauth",
+    ok: true,
+    refreshToken: refresh_token,
+    accessToken: token.fetch("access_token", "").to_s.strip,
+    expiresIn: token.fetch("expires_in", 3600).to_i,
+    clientId: AMAZON_BUSINESS_CLIENT_ID,
+    marketplace: AMAZON_BUSINESS_MARKETPLACE_ID,
+    endpoint: AMAZON_BUSINESS_API_ENDPOINT
+  }
+end
+
+def amazon_oauth_result_page(request, response, payload)
+  response.status = 200
+  response["Content-Type"] = "text/html; charset=utf-8"
+  response["Set-Cookie"] = clear_amazon_oauth_state_cookie
+  title = payload[:ok] || payload["ok"] ? "Amazon connected" : "Amazon connection failed"
+  message = payload[:ok] || payload["ok"] ?
+    "Amazon Business sent a refresh token back to GiftFlow. You can close this window." :
+    (payload[:error] || payload["error"] || "Amazon Business could not connect.").to_s
+  response.body = <<~HTML
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>#{WEBrick::HTMLUtils.escape(title)}</title>
+        <style>
+          body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:Inter,Arial,sans-serif;background:#fbfaf6;color:#171717}
+          main{width:min(560px,calc(100% - 40px));padding:32px;border:1px solid #ded8cc;background:#fff;border-radius:8px;box-shadow:0 18px 48px rgba(0,0,0,.12)}
+          h1{margin:0 0 12px;font-size:32px}
+          p{margin:0;color:#5f5a52;line-height:1.5}
+        </style>
+      </head>
+      <body>
+        <main><h1>#{WEBrick::HTMLUtils.escape(title)}</h1><p>#{WEBrick::HTMLUtils.escape(message)}</p></main>
+        <script>
+          const payload = #{JSON.generate(payload)};
+          const targetOrigin = #{JSON.generate(request_origin(request))};
+          if (window.opener) {
+            window.opener.postMessage(payload, targetOrigin);
+            setTimeout(() => window.close(), 900);
+          }
+        </script>
+      </body>
+    </html>
+  HTML
 end
 
 def fetch_google_profile(access_token)
@@ -816,6 +939,51 @@ end
 server.mount_proc("/api/auth/logout") do |_request, response|
   response["Set-Cookie"] = clear_session_cookie
   json_response(response, { ok: true })
+end
+
+server.mount_proc("/api/amazon/oauth/config") do |request, response|
+  next unless require_user(request, response)
+
+  missing = amazon_oauth_missing_settings
+  json_response(response, {
+    ok: true,
+    configured: missing.empty?,
+    missing: missing,
+    clientId: AMAZON_BUSINESS_CLIENT_ID,
+    marketplace: AMAZON_BUSINESS_MARKETPLACE_ID,
+    marketplaceUrl: AMAZON_BUSINESS_MARKETPLACE_URL,
+    endpoint: AMAZON_BUSINESS_API_ENDPOINT,
+    redirectUri: amazon_redirect_uri(request)
+  })
+end
+
+server.mount_proc("/api/amazon/oauth/start") do |request, response|
+  next unless require_user(request, response)
+
+  unless amazon_oauth_configured?
+    amazon_oauth_result_page(request, response, {
+      type: "giftflow-amazon-oauth",
+      ok: false,
+      error: "Amazon Business OAuth is not configured. Add AMAZON_BUSINESS_APPLICATION_ID, AMAZON_BUSINESS_CLIENT_ID, and AMAZON_BUSINESS_CLIENT_SECRET on the server."
+    })
+    next
+  end
+
+  state = base64url_encode(SecureRandom.random_bytes(32))
+  response["Set-Cookie"] = amazon_oauth_state_cookie(state)
+  redirect_response(response, amazon_authorization_url(state, request))
+end
+
+server.mount_proc("/api/amazon/oauth/callback") do |request, response|
+  begin
+    amazon_oauth_result_page(request, response, amazon_oauth_callback_payload(request))
+  rescue StandardError => error
+    amazon_oauth_result_page(request, response, {
+      type: "giftflow-amazon-oauth",
+      ok: false,
+      error: error.message
+    })
+  end
 end
 
 server.mount_proc("/api/gift-ideas") do |request, response|

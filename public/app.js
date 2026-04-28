@@ -140,6 +140,7 @@ let state = loadState();
 let currentSlide = 0;
 let authConfig = null;
 let currentUser = null;
+let amazonConnectionConfig = null;
 
 async function initAuth() {
   const authMessage = consumeAuthMessage();
@@ -284,6 +285,7 @@ function showApp() {
   byId("appShell").hidden = false;
   byId("userBadge").textContent = currentUser?.email ? `Signed in as ${currentUser.email}` : "";
   render();
+  loadAmazonConnectionConfig();
   byId("campaign").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -1093,6 +1095,101 @@ function syncSettingsFromInputs() {
   state.amazon.endpoint = fieldValue("amazonEndpoint");
 }
 
+async function loadAmazonConnectionConfig() {
+  const status = byId("amazonConnectionStatus");
+  const button = byId("connectAmazonButton");
+  if (!status || !button || !currentUser) return;
+
+  status.textContent = "Checking Amazon Business connection setup...";
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/amazon/oauth/config", { credentials: "same-origin" });
+    const payload = await response.json();
+    amazonConnectionConfig = payload;
+    applyAmazonConnectionConfig();
+  } catch (_error) {
+    amazonConnectionConfig = { configured: false, missing: ["Amazon connection route unavailable"] };
+    applyAmazonConnectionConfig();
+  }
+}
+
+function applyAmazonConnectionConfig() {
+  const status = byId("amazonConnectionStatus");
+  const button = byId("connectAmazonButton");
+  if (!status || !button) return;
+
+  const missing = amazonConnectionConfig?.missing || [];
+  button.disabled = !amazonConnectionConfig?.configured;
+
+  if (amazonConnectionConfig?.clientId && !fieldValue("amazonClientId")) {
+    setValue("amazonClientId", amazonConnectionConfig.clientId);
+    state.amazon.clientId = amazonConnectionConfig.clientId;
+  }
+  if (amazonConnectionConfig?.marketplace && !fieldValue("amazonMarketplace")) {
+    setValue("amazonMarketplace", amazonConnectionConfig.marketplace);
+    state.amazon.marketplace = amazonConnectionConfig.marketplace;
+  }
+  if (amazonConnectionConfig?.endpoint && !fieldValue("amazonEndpoint")) {
+    setValue("amazonEndpoint", amazonConnectionConfig.endpoint);
+    state.amazon.endpoint = amazonConnectionConfig.endpoint;
+  }
+
+  if (amazonConnectionConfig?.configured) {
+    status.textContent = state.amazon.refreshToken
+      ? "Amazon Business is connected. Refresh token is present."
+      : "Amazon Business OAuth is ready. Connect as the Amazon Business admin to receive a refresh token.";
+  } else {
+    status.textContent = `Amazon Business OAuth needs server settings: ${missing.join(", ")}.`;
+  }
+
+  silentSave();
+}
+
+async function connectAmazonBusiness() {
+  if (!amazonConnectionConfig) {
+    await loadAmazonConnectionConfig();
+  }
+
+  if (!amazonConnectionConfig?.configured) {
+    applyAmazonConnectionConfig();
+    showResult("Add the missing Amazon Business OAuth environment variables on Forge, then deploy again.", false);
+    return;
+  }
+
+  const popup = window.open("/api/amazon/oauth/start", "giftflowAmazonOAuth", "width=760,height=780");
+  if (!popup) {
+    window.location.href = "/api/amazon/oauth/start";
+    return;
+  }
+
+  popup.focus();
+  byId("amazonConnectionStatus").textContent = "Amazon authorization window opened. Sign in as the Amazon Business admin and select Allow.";
+}
+
+function receiveAmazonOAuthMessage(event) {
+  if (event.origin !== window.location.origin) return;
+  const payload = event.data || {};
+  if (payload.type !== "giftflow-amazon-oauth") return;
+
+  if (!payload.ok) {
+    const message = payload.error || "Amazon Business did not return a refresh token.";
+    byId("amazonConnectionStatus").textContent = message;
+    showResult(message, false);
+    return;
+  }
+
+  setValue("amazonRefreshToken", payload.refreshToken);
+  if (payload.clientId) setValue("amazonClientId", payload.clientId);
+  if (payload.marketplace) setValue("amazonMarketplace", payload.marketplace);
+  if (payload.endpoint) setValue("amazonEndpoint", payload.endpoint);
+  setValue("amazonMode", "amazon-business-api");
+  syncSettingsFromInputs();
+  silentSave();
+  byId("amazonConnectionStatus").textContent = "Amazon Business connected. Refresh token saved in this browser workspace.";
+  renderStatus();
+  showResult("Amazon Business returned a refresh token. GiftFlow can now mark due orders as ready for the live connector.", true);
+}
+
 function showResult(message, success) {
   const result = byId("automationResult");
   result.className = `automation-result is-visible ${success ? "success" : "warning"}`;
@@ -1228,9 +1325,11 @@ function wireButtons() {
   byId("saveButton").addEventListener("click", saveState);
   byId("heroRunButton").addEventListener("click", processDueGifts);
   byId("logoutButton").addEventListener("click", signOut);
+  byId("connectAmazonButton").addEventListener("click", connectAmazonBusiness);
   byId("signInPanel").addEventListener("submit", submitSignIn);
   byId("createAccountPanel").addEventListener("submit", submitCreateAccount);
   byId("onboardingPanel").addEventListener("submit", submitOnboarding);
+  window.addEventListener("message", receiveAmazonOAuthMessage);
   document.querySelectorAll(".need-help-link").forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();

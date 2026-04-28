@@ -91,6 +91,20 @@ The server verifies credentials before setting a signed, HttpOnly session cookie
 
 The current app supports queue-only and sandbox-style processing. The `amazon-business-api` mode creates records marked `ready_for_live_connector` when credential fields are present, but it does not place live Amazon orders yet.
 
+GiftFlow can help complete the Amazon Business OAuth refresh-token step. After Amazon Business API approval, set these values on Forge:
+
+```bash
+AMAZON_BUSINESS_APPLICATION_ID="amzn1.sp.solution.xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+AMAZON_BUSINESS_CLIENT_ID="your-lwa-client-id"
+AMAZON_BUSINESS_CLIENT_SECRET="your-lwa-client-secret"
+AMAZON_BUSINESS_REDIRECT_URI="https://your-domain.com/api/amazon/oauth/callback"
+AMAZON_BUSINESS_MARKETPLACE_URL="https://www.amazon.com"
+AMAZON_BUSINESS_MARKETPLACE_ID="ATVPDKIKX0DER"
+AMAZON_BUSINESS_API_ENDPOINT="https://api.business.amazon.com"
+```
+
+Add the same redirect URI to the Amazon Business Solution Provider Portal app registration. Then sign in to GiftFlow, open Automation, and choose **Connect Amazon Business**. The backend exchanges Amazon's OAuth code at the Login With Amazon token endpoint and fills the returned refresh token into the workspace.
+
 To complete live ordering, connect the processing endpoint to the approved Amazon Business buying workflow for your account, then map each generated `amazonPayload` to that API's order creation request. Keeping this boundary explicit prevents accidental gift sends while campaign setup is still being tested.
 
 ## Amazon Associates Links

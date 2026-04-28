@@ -15,6 +15,9 @@ define('GOOGLE_STATE_MAX_AGE', 600);
 define('GOOGLE_AUTH_ENDPOINT', 'https://accounts.google.com/o/oauth2/v2/auth');
 define('GOOGLE_TOKEN_ENDPOINT', 'https://oauth2.googleapis.com/token');
 define('GOOGLE_USERINFO_ENDPOINT', 'https://openidconnect.googleapis.com/v1/userinfo');
+define('AMAZON_OAUTH_STATE_COOKIE', 'giftflow_amazon_oauth_state');
+define('AMAZON_OAUTH_STATE_MAX_AGE', 600);
+define('AMAZON_LWA_TOKEN_ENDPOINT', 'https://api.amazon.com/auth/O2/token');
 
 load_env_file(GIFT_ROOT . '/.env');
 handle_request();
@@ -143,6 +146,62 @@ function google_login_configured(): bool
         present(google_client_id()) &&
         present(google_client_secret()) &&
         (count(google_allowed_emails()) > 0 || count(google_allowed_domains()) > 0);
+}
+
+function amazon_application_id(): string
+{
+    return trim(env_value('AMAZON_BUSINESS_APPLICATION_ID', ''));
+}
+
+function amazon_client_id(): string
+{
+    return trim(env_value('AMAZON_BUSINESS_CLIENT_ID', ''));
+}
+
+function amazon_client_secret(): string
+{
+    return trim(env_value('AMAZON_BUSINESS_CLIENT_SECRET', ''));
+}
+
+function amazon_marketplace_url(): string
+{
+    return rtrim(trim(env_value('AMAZON_BUSINESS_MARKETPLACE_URL', 'https://www.amazon.com')), '/');
+}
+
+function amazon_marketplace_id(): string
+{
+    return trim(env_value('AMAZON_BUSINESS_MARKETPLACE_ID', 'ATVPDKIKX0DER'));
+}
+
+function amazon_api_endpoint(): string
+{
+    return rtrim(trim(env_value('AMAZON_BUSINESS_API_ENDPOINT', 'https://api.business.amazon.com')), '/');
+}
+
+function amazon_redirect_uri(): string
+{
+    $configured = trim(env_value('AMAZON_BUSINESS_REDIRECT_URI', ''));
+    return $configured !== '' ? $configured : app_origin() . '/api/amazon/oauth/callback';
+}
+
+function amazon_oauth_missing_settings(): array
+{
+    $missing = [];
+    if (!present(amazon_application_id())) {
+        $missing[] = 'AMAZON_BUSINESS_APPLICATION_ID';
+    }
+    if (!present(amazon_client_id())) {
+        $missing[] = 'AMAZON_BUSINESS_CLIENT_ID';
+    }
+    if (!present(amazon_client_secret())) {
+        $missing[] = 'AMAZON_BUSINESS_CLIENT_SECRET';
+    }
+    return $missing;
+}
+
+function amazon_oauth_configured(): bool
+{
+    return count(amazon_oauth_missing_settings()) === 0;
 }
 
 function app_origin(): string
@@ -554,6 +613,28 @@ function clear_google_state_cookie(): void
     ]);
 }
 
+function set_amazon_oauth_state_cookie(string $state): void
+{
+    setcookie(AMAZON_OAUTH_STATE_COOKIE, $state, [
+        'expires' => time() + AMAZON_OAUTH_STATE_MAX_AGE,
+        'path' => '/',
+        'httponly' => true,
+        'samesite' => 'Lax',
+        'secure' => is_https_request(),
+    ]);
+}
+
+function clear_amazon_oauth_state_cookie(): void
+{
+    setcookie(AMAZON_OAUTH_STATE_COOKIE, '', [
+        'expires' => time() - 3600,
+        'path' => '/',
+        'httponly' => true,
+        'samesite' => 'Lax',
+        'secure' => is_https_request(),
+    ]);
+}
+
 function redirect_response(string $location): void
 {
     http_response_code(302);
@@ -578,6 +659,15 @@ function google_authorization_url(string $state): string
     ]);
 }
 
+function amazon_authorization_url(string $state): string
+{
+    return amazon_marketplace_url() . '/b2b/abws/oauth?' . http_build_query([
+        'state' => $state,
+        'redirect_uri' => amazon_redirect_uri(),
+        'applicationId' => amazon_application_id(),
+    ]);
+}
+
 function http_json_request(string $method, string $url, array $headers = [], string $body = ''): array
 {
     $status = 0;
@@ -599,7 +689,7 @@ function http_json_request(string $method, string $url, array $headers = [], str
         curl_close($curl);
 
         if ($response === false) {
-            throw new RuntimeException('Google sign-in could not reach Google. ' . ($curlError ?: 'Check outbound HTTPS from Forge.'));
+            throw new RuntimeException('OAuth request could not reach the provider. ' . ($curlError ?: 'Check outbound HTTPS from Forge.'));
         }
     } else {
         $headerText = implode("\r\n", $headers);
@@ -618,7 +708,7 @@ function http_json_request(string $method, string $url, array $headers = [], str
 
         $response = @file_get_contents($url, false, stream_context_create($options));
         if ($response === false) {
-            throw new RuntimeException('Google sign-in could not reach Google. Check outbound HTTPS from Forge.');
+            throw new RuntimeException('OAuth request could not reach the provider. Check outbound HTTPS from Forge.');
         }
 
         $responseHeaders = $http_response_header ?? [];
@@ -629,11 +719,11 @@ function http_json_request(string $method, string $url, array $headers = [], str
 
     $decoded = json_decode($response, true);
     if (!is_array($decoded)) {
-        throw new RuntimeException('Google returned an unreadable response.');
+        throw new RuntimeException('OAuth provider returned an unreadable response.');
     }
 
     if ($status < 200 || $status >= 300) {
-        $reason = (string) ($decoded['error_description'] ?? $decoded['error'] ?? 'Google sign-in failed.');
+        $reason = (string) ($decoded['error_description'] ?? $decoded['error'] ?? 'OAuth request failed.');
         throw new RuntimeException($reason);
     }
 
@@ -654,6 +744,80 @@ function exchange_google_code(string $code): array
             'grant_type' => 'authorization_code',
         ])
     );
+}
+
+function exchange_amazon_oauth_code(string $code): array
+{
+    return http_json_request(
+        'POST',
+        AMAZON_LWA_TOKEN_ENDPOINT,
+        ['Content-Type: application/x-www-form-urlencoded'],
+        http_build_query([
+            'grant_type' => 'authorization_code',
+            'code' => $code,
+            'client_id' => amazon_client_id(),
+            'client_secret' => amazon_client_secret(),
+            'redirect_uri' => amazon_redirect_uri(),
+        ])
+    );
+}
+
+function amazon_oauth_callback_payload(): array
+{
+    if (!amazon_oauth_configured()) {
+        throw new RuntimeException('Amazon Business OAuth is not configured. Set the Amazon Business application ID, client ID, and client secret on Forge.');
+    }
+
+    $expectedState = (string) ($_COOKIE[AMAZON_OAUTH_STATE_COOKIE] ?? '');
+    $actualState = (string) ($_GET['state'] ?? '');
+    if ($expectedState === '' || $actualState === '' || !hash_equals($expectedState, $actualState)) {
+        throw new RuntimeException('Amazon authorization expired. Try connecting again.');
+    }
+
+    if (present($_GET['error'] ?? '')) {
+        throw new RuntimeException('Amazon authorization was canceled or denied.');
+    }
+
+    $code = trim((string) ($_GET['code'] ?? ''));
+    if ($code === '') {
+        throw new RuntimeException('Amazon did not return an OAuth code.');
+    }
+
+    $token = exchange_amazon_oauth_code($code);
+    $refreshToken = trim((string) ($token['refresh_token'] ?? ''));
+    if ($refreshToken === '') {
+        throw new RuntimeException('Amazon did not return a refresh token.');
+    }
+
+    return [
+        'type' => 'giftflow-amazon-oauth',
+        'ok' => true,
+        'refreshToken' => $refreshToken,
+        'accessToken' => trim((string) ($token['access_token'] ?? '')),
+        'expiresIn' => (int) ($token['expires_in'] ?? 3600),
+        'clientId' => amazon_client_id(),
+        'marketplace' => amazon_marketplace_id(),
+        'endpoint' => amazon_api_endpoint(),
+    ];
+}
+
+function amazon_oauth_result_page(array $payload): void
+{
+    clear_amazon_oauth_state_cookie();
+    http_response_code(200);
+    header('Content-Type: text/html; charset=utf-8');
+    $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $origin = json_encode(app_origin(), JSON_UNESCAPED_SLASHES);
+    $title = $payload['ok'] ? 'Amazon connected' : 'Amazon connection failed';
+    $message = $payload['ok']
+        ? 'Amazon Business sent a refresh token back to GiftFlow. You can close this window.'
+        : (string) ($payload['error'] ?? 'Amazon Business could not connect.');
+    echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
+    echo '<title>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</title>';
+    echo '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:Inter,Arial,sans-serif;background:#fbfaf6;color:#171717}main{width:min(560px,calc(100% - 40px));padding:32px;border:1px solid #ded8cc;background:#fff;border-radius:8px;box-shadow:0 18px 48px rgba(0,0,0,.12)}h1{margin:0 0 12px;font-size:32px}p{margin:0;color:#5f5a52;line-height:1.5}</style>';
+    echo '</head><body><main><h1>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</h1><p>' . htmlspecialchars($message, ENT_QUOTES, 'UTF-8') . '</p></main>';
+    echo '<script>const payload=' . $json . ';const targetOrigin=' . $origin . ';if(window.opener){window.opener.postMessage(payload,targetOrigin);setTimeout(()=>window.close(),900);}</script>';
+    echo '</body></html>';
 }
 
 function fetch_google_profile(string $accessToken): array
@@ -1188,6 +1352,58 @@ function handle_request(): void
     if ($path === '/api/auth/logout') {
         clear_session_cookie();
         json_response(['ok' => true]);
+        return;
+    }
+
+    if ($path === '/api/amazon/oauth/config') {
+        if (require_user() === null) {
+            return;
+        }
+
+        $missing = amazon_oauth_missing_settings();
+        json_response([
+            'ok' => true,
+            'configured' => count($missing) === 0,
+            'missing' => $missing,
+            'clientId' => amazon_client_id(),
+            'marketplace' => amazon_marketplace_id(),
+            'marketplaceUrl' => amazon_marketplace_url(),
+            'endpoint' => amazon_api_endpoint(),
+            'redirectUri' => amazon_redirect_uri(),
+        ]);
+        return;
+    }
+
+    if ($path === '/api/amazon/oauth/start') {
+        if (require_user() === null) {
+            return;
+        }
+
+        if (!amazon_oauth_configured()) {
+            amazon_oauth_result_page([
+                'type' => 'giftflow-amazon-oauth',
+                'ok' => false,
+                'error' => 'Amazon Business OAuth is not configured. Add AMAZON_BUSINESS_APPLICATION_ID, AMAZON_BUSINESS_CLIENT_ID, and AMAZON_BUSINESS_CLIENT_SECRET on Forge.',
+            ]);
+            return;
+        }
+
+        $state = base64url_encode(random_bytes(32));
+        set_amazon_oauth_state_cookie($state);
+        redirect_response(amazon_authorization_url($state));
+        return;
+    }
+
+    if ($path === '/api/amazon/oauth/callback') {
+        try {
+            amazon_oauth_result_page(amazon_oauth_callback_payload());
+        } catch (Throwable $error) {
+            amazon_oauth_result_page([
+                'type' => 'giftflow-amazon-oauth',
+                'ok' => false,
+                'error' => $error->getMessage(),
+            ]);
+        }
         return;
     }
 
