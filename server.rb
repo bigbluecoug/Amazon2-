@@ -567,6 +567,9 @@ def amazon_oauth_result_page(request, response, payload)
           if (window.opener) {
             window.opener.postMessage(payload, targetOrigin);
             setTimeout(() => window.close(), 900);
+          } else {
+            localStorage.setItem("giftflow-amazon-oauth-result", JSON.stringify(payload));
+            setTimeout(() => { window.location.href = "/#automation"; }, 900);
           }
         </script>
       </body>

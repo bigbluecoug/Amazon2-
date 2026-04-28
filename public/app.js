@@ -1,4 +1,5 @@
 const storeKey = "giftflow-studio-state-v1";
+const amazonOAuthResultKey = "giftflow-amazon-oauth-result";
 const demoAuthEmail = "team@giftflow.local";
 const demoAuthPassword = "giftflow-demo";
 const affiliateIdeas = [
@@ -286,6 +287,7 @@ function showApp() {
   byId("userBadge").textContent = currentUser?.email ? `Signed in as ${currentUser.email}` : "";
   render();
   loadAmazonConnectionConfig();
+  consumeStoredAmazonOAuthResult();
   byId("campaign").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -1181,6 +1183,23 @@ function receiveAmazonOAuthMessage(event) {
   if (event.origin !== window.location.origin) return;
   const payload = event.data || {};
   if (payload.type !== "giftflow-amazon-oauth") return;
+  applyAmazonOAuthResult(payload);
+}
+
+function consumeStoredAmazonOAuthResult() {
+  const raw = localStorage.getItem(amazonOAuthResultKey);
+  if (!raw) return;
+
+  localStorage.removeItem(amazonOAuthResultKey);
+  try {
+    applyAmazonOAuthResult(JSON.parse(raw));
+  } catch (_error) {
+    showResult("Amazon returned an unreadable authorization result. Try connecting again.", false);
+  }
+}
+
+function applyAmazonOAuthResult(payload) {
+  if (!payload || payload.type !== "giftflow-amazon-oauth") return;
 
   if (!payload.ok) {
     const message = payload.error || "Amazon Business did not return a refresh token.";

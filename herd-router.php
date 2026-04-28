@@ -816,7 +816,7 @@ function amazon_oauth_result_page(array $payload): void
     echo '<title>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</title>';
     echo '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:Inter,Arial,sans-serif;background:#fbfaf6;color:#171717}main{width:min(560px,calc(100% - 40px));padding:32px;border:1px solid #ded8cc;background:#fff;border-radius:8px;box-shadow:0 18px 48px rgba(0,0,0,.12)}h1{margin:0 0 12px;font-size:32px}p{margin:0;color:#5f5a52;line-height:1.5}</style>';
     echo '</head><body><main><h1>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</h1><p>' . htmlspecialchars($message, ENT_QUOTES, 'UTF-8') . '</p></main>';
-    echo '<script>const payload=' . $json . ';const targetOrigin=' . $origin . ';if(window.opener){window.opener.postMessage(payload,targetOrigin);setTimeout(()=>window.close(),900);}</script>';
+    echo '<script>const payload=' . $json . ';const targetOrigin=' . $origin . ';if(window.opener){window.opener.postMessage(payload,targetOrigin);setTimeout(()=>window.close(),900);}else{localStorage.setItem("giftflow-amazon-oauth-result",JSON.stringify(payload));setTimeout(()=>{window.location.href="/#automation";},900);}</script>';
     echo '</body></html>';
 }
 
