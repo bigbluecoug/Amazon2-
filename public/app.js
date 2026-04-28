@@ -1101,9 +1101,12 @@ async function loadAmazonConnectionConfig() {
   if (!status || !button || !currentUser) return;
 
   status.textContent = "Checking Amazon Business connection setup...";
-  button.disabled = true;
+  button.disabled = false;
   try {
     const response = await fetch("/api/amazon/oauth/config", { credentials: "same-origin" });
+    if (!response.ok) {
+      throw new Error("Amazon connection route unavailable");
+    }
     const payload = await response.json();
     amazonConnectionConfig = payload;
     applyAmazonConnectionConfig();
@@ -1119,7 +1122,8 @@ function applyAmazonConnectionConfig() {
   if (!status || !button) return;
 
   const missing = amazonConnectionConfig?.missing || [];
-  button.disabled = !amazonConnectionConfig?.configured;
+  button.disabled = false;
+  button.textContent = amazonConnectionConfig?.configured ? "Connect Amazon Business" : "Check Amazon setup";
 
   if (amazonConnectionConfig?.clientId && !fieldValue("amazonClientId")) {
     setValue("amazonClientId", amazonConnectionConfig.clientId);
@@ -1146,22 +1150,29 @@ function applyAmazonConnectionConfig() {
 }
 
 async function connectAmazonBusiness() {
+  const popup = window.open("", "giftflowAmazonOAuth", "width=760,height=780");
+  if (popup) {
+    popup.document.write("<!doctype html><title>Checking Amazon setup</title><p style=\"font-family:Arial,sans-serif;padding:24px\">Checking Amazon Business setup...</p>");
+  }
+
   if (!amazonConnectionConfig) {
     await loadAmazonConnectionConfig();
   }
 
   if (!amazonConnectionConfig?.configured) {
+    if (popup) popup.close();
     applyAmazonConnectionConfig();
-    showResult("Add the missing Amazon Business OAuth environment variables on Forge, then deploy again.", false);
+    const missing = amazonConnectionConfig?.missing?.join(", ") || "Amazon Business OAuth settings";
+    showResult(`Amazon Business is not ready yet. Add these Forge environment variables: ${missing}.`, false);
     return;
   }
 
-  const popup = window.open("/api/amazon/oauth/start", "giftflowAmazonOAuth", "width=760,height=780");
   if (!popup) {
     window.location.href = "/api/amazon/oauth/start";
     return;
   }
 
+  popup.location.href = "/api/amazon/oauth/start";
   popup.focus();
   byId("amazonConnectionStatus").textContent = "Amazon authorization window opened. Sign in as the Amazon Business admin and select Allow.";
 }
