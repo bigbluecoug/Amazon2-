@@ -10,14 +10,36 @@ ROOT = File.expand_path(__dir__)
 PUBLIC_ROOT = File.join(ROOT, "public")
 DATA_ROOT = File.join(ROOT, "data")
 GIFT_IDEAS_FILE = File.join(DATA_ROOT, "gift-ideas.json")
+
+def load_env_file(path)
+  return unless File.file?(path)
+
+  File.readlines(path, chomp: true).each do |line|
+    line = line.strip
+    next if line.empty? || line.start_with?("#") || !line.include?("=")
+
+    key, value = line.split("=", 2)
+    key = key.strip
+    value = value.to_s.strip
+    next if key.empty? || ENV.key?(key)
+
+    quote = value[0]
+    value = value[1...-1] if ["\"", "'"].include?(quote) && value.end_with?(quote)
+    ENV[key] = value
+  end
+end
+
+load_env_file(File.join(ROOT, ".env"))
+
 PORT = Integer(ENV.fetch("PORT", "4174"))
 DEFAULT_AUTH_EMAIL = "team@giftflow.local"
 DEFAULT_AUTH_PASSWORD = "giftflow-demo"
-AUTH_EMAIL = ENV.fetch("AUTH_EMAIL", DEFAULT_AUTH_EMAIL).strip.downcase
-AUTH_PASSWORD = ENV.fetch("AUTH_PASSWORD", DEFAULT_AUTH_PASSWORD)
+DEMO_LOGIN_ENABLED = ENV.fetch("ALLOW_DEMO_LOGIN", "false").strip.downcase == "true"
+AUTH_EMAIL = ENV.fetch("AUTH_EMAIL", DEMO_LOGIN_ENABLED ? DEFAULT_AUTH_EMAIL : "").strip.downcase
+AUTH_PASSWORD = ENV.fetch("AUTH_PASSWORD", DEMO_LOGIN_ENABLED ? DEFAULT_AUTH_PASSWORD : "")
 AUTH_NAME = ENV.fetch("AUTH_NAME", "GiftFlow Team").strip
 GIFT_IDEA_ADMIN_EMAILS = ENV.fetch("GIFT_IDEA_ADMIN_EMAILS", AUTH_EMAIL).split(",").map { |email| email.strip.downcase }.reject(&:empty?)
-USING_DEFAULT_CREDENTIALS = ENV["AUTH_EMAIL"].nil? || ENV["AUTH_PASSWORD"].nil?
+USING_DEFAULT_CREDENTIALS = DEMO_LOGIN_ENABLED && (ENV["AUTH_EMAIL"].nil? || ENV["AUTH_PASSWORD"].nil?)
 SESSION_SECRET = ENV.fetch("SESSION_SECRET", "development-only-change-me")
 SESSION_COOKIE = "giftflow_session"
 SESSION_MAX_AGE = 60 * 60 * 24 * 7

@@ -55,12 +55,12 @@ function env_value(string $key, string $default = ''): string
 
 function auth_email(): string
 {
-    return strtolower(trim(env_value('AUTH_EMAIL', DEFAULT_AUTH_EMAIL)));
+    return strtolower(trim(env_value('AUTH_EMAIL', demo_login_enabled() ? DEFAULT_AUTH_EMAIL : '')));
 }
 
 function auth_password(): string
 {
-    return env_value('AUTH_PASSWORD', DEFAULT_AUTH_PASSWORD);
+    return env_value('AUTH_PASSWORD', demo_login_enabled() ? DEFAULT_AUTH_PASSWORD : '');
 }
 
 function auth_name(): string
@@ -76,6 +76,11 @@ function gift_idea_admin_emails(): array
     }, explode(',', $raw))));
 }
 
+function demo_login_enabled(): bool
+{
+    return strtolower(trim(env_value('ALLOW_DEMO_LOGIN', 'false'))) === 'true';
+}
+
 function session_secret(): string
 {
     return env_value('SESSION_SECRET', 'development-only-change-me');
@@ -83,7 +88,7 @@ function session_secret(): string
 
 function using_default_credentials(): bool
 {
-    return getenv('AUTH_EMAIL') === false || getenv('AUTH_PASSWORD') === false;
+    return demo_login_enabled() && (getenv('AUTH_EMAIL') === false || getenv('AUTH_PASSWORD') === false);
 }
 
 function present($value): bool

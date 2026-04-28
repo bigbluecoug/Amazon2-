@@ -46,30 +46,23 @@ http://giftflow.test
 
 If you prefer the Herd UI, add this project as a linked directory and use `giftflow` as the site name. Linking the project root or the `public/` folder both work.
 
-For custom login credentials in Herd, copy the example env file and edit the values:
+For live or shared access in Herd, copy the example env file and set private credentials:
 
 ```bash
 cp .env.example .env
 ```
 
-Use a long random `SESSION_SECRET`; for example:
+Use long random values for `AUTH_PASSWORD` and `SESSION_SECRET`; for example:
 
 ```bash
 openssl rand -hex 32
 ```
 
-## Temporary Login Setup
+## Private Login Setup
 
-The app is protected by a temporary email/password login while the production identity provider is being decided. For local testing, the default credentials are:
+The app is protected by email/password login while the production identity provider is being decided. It now fails closed by default: if `AUTH_EMAIL` and `AUTH_PASSWORD` are not configured, nobody can sign in.
 
-```text
-Email: team@giftflow.local
-Password: giftflow-demo
-```
-
-When the app is running with those local defaults, the sign-in screen also shows an **Open demo workspace** button that signs in and opens the flow page directly.
-
-For anything shared with your team, set your own credentials before starting the server:
+For a private live workspace, set credentials before starting the server:
 
 ```bash
 AUTH_EMAIL="you@company.com" \
@@ -80,6 +73,8 @@ ruby server.rb
 ```
 
 The server verifies those credentials before setting a signed, HttpOnly session cookie. The order-processing API rejects unauthenticated requests.
+
+Demo login is disabled unless `ALLOW_DEMO_LOGIN=true` is explicitly set. Do not enable demo login for a shared or live site.
 
 ## Amazon Automation Boundary
 
