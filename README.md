@@ -46,55 +46,46 @@ http://giftflow.test
 
 If you prefer the Herd UI, add this project as a linked directory and use `giftflow` as the site name. Linking the project root or the `public/` folder both work.
 
-For live or shared access in Herd, copy the example env file and set private credentials:
+For live or shared access in Herd, copy the example env file and set private values:
 
 ```bash
 cp .env.example .env
 ```
 
-Use long random values for `AUTH_PASSWORD` and `SESSION_SECRET`; for example:
+Use a long random value for `SESSION_SECRET`; for example:
 
 ```bash
 openssl rand -hex 32
 ```
 
-## Private Login Setup
+## Account Login Setup
 
-The app supports private email/password login and Google OAuth login. It fails closed by default: if no login method is configured, nobody can sign in.
+The app supports account creation with email and password. Accounts are stored server-side in `data/users.json`, and passwords are stored as salted hashes. The first created account is marked as an admin for editing gift ideas.
 
-For a private live workspace, set credentials before starting the server:
+For a live workspace, set a long session secret before starting the server:
+
+```bash
+SESSION_SECRET="use-a-long-random-secret" \
+ALLOW_ACCOUNT_REGISTRATION=true \
+ruby server.rb
+```
+
+After you create the accounts you want, set this on Forge if you want to stop public sign-ups:
+
+```bash
+ALLOW_ACCOUNT_REGISTRATION=false
+```
+
+You can still keep a private fallback login by setting these values:
 
 ```bash
 AUTH_EMAIL="you@company.com" \
 AUTH_PASSWORD="use-a-strong-password" \
 AUTH_NAME="Your Name" \
-SESSION_SECRET="use-a-long-random-secret" \
 ruby server.rb
 ```
 
-The server verifies those credentials before setting a signed, HttpOnly session cookie. The order-processing API rejects unauthenticated requests.
-
-Demo login is disabled unless `ALLOW_DEMO_LOGIN=true` is explicitly set. Do not enable demo login for a shared or live site.
-
-## Google Login Setup
-
-For Forge or any live site, create a Google OAuth Web application client and add this authorized redirect URI:
-
-```text
-https://your-domain.com/api/auth/google/callback
-```
-
-Then set these environment variables on the server:
-
-```bash
-GOOGLE_CLIENT_ID="your-google-client-id"
-GOOGLE_CLIENT_SECRET="your-google-client-secret"
-GOOGLE_REDIRECT_URI="https://your-domain.com/api/auth/google/callback"
-GOOGLE_ALLOWED_EMAILS="you@gmail.com"
-SESSION_SECRET="use-a-long-random-secret"
-```
-
-`GOOGLE_ALLOWED_EMAILS` is required unless you set `GOOGLE_ALLOWED_DOMAINS`. Keep it to the exact Google accounts that should access the workspace. After changing Forge environment variables, restart/reload the site so PHP sees the new values.
+The server verifies credentials before setting a signed, HttpOnly session cookie. The order-processing API rejects unauthenticated requests. Demo login is disabled unless `ALLOW_DEMO_LOGIN=true` is explicitly set. Do not enable demo login for a shared or live site.
 
 ## Amazon Automation Boundary
 
@@ -108,7 +99,7 @@ The gift sequence links to a connected `/ideas.html` page for Amazon Associates 
 
 Gift suggestions are loaded from `data/gift-ideas.json`. Signed-in users can edit the backend catalog at `/admin-gifts.html`, which saves through `POST /api/gift-ideas`.
 
-Catalog edits are restricted to approved admin emails. By default, the configured `AUTH_EMAIL` can edit gifts. To allow more people, set a comma-separated list:
+Catalog edits are restricted to admin accounts and approved admin emails. The first created account is an admin. To allow more people by email, set a comma-separated list:
 
 ```bash
 GIFT_IDEA_ADMIN_EMAILS="you@company.com,teammate@company.com"

@@ -12,6 +12,7 @@ ROOT = File.expand_path(__dir__)
 PUBLIC_ROOT = File.join(ROOT, "public")
 DATA_ROOT = File.join(ROOT, "data")
 GIFT_IDEAS_FILE = File.join(DATA_ROOT, "gift-ideas.json")
+USERS_FILE = File.join(DATA_ROOT, "users.json")
 
 def load_env_file(path)
   return unless File.file?(path)
@@ -41,6 +42,7 @@ AUTH_EMAIL = ENV.fetch("AUTH_EMAIL", DEMO_LOGIN_ENABLED ? DEFAULT_AUTH_EMAIL : "
 AUTH_PASSWORD = ENV.fetch("AUTH_PASSWORD", DEMO_LOGIN_ENABLED ? DEFAULT_AUTH_PASSWORD : "")
 AUTH_NAME = ENV.fetch("AUTH_NAME", "GiftFlow Team").strip
 GIFT_IDEA_ADMIN_EMAILS = ENV.fetch("GIFT_IDEA_ADMIN_EMAILS", AUTH_EMAIL).split(",").map { |email| email.strip.downcase }.reject(&:empty?)
+ACCOUNT_REGISTRATION_ENABLED = ENV.fetch("ALLOW_ACCOUNT_REGISTRATION", "true").strip.downcase != "false"
 USING_DEFAULT_CREDENTIALS = DEMO_LOGIN_ENABLED && (ENV["AUTH_EMAIL"].nil? || ENV["AUTH_PASSWORD"].nil?)
 SESSION_SECRET = ENV.fetch("SESSION_SECRET", "development-only-change-me")
 SESSION_COOKIE = "giftflow_session"
@@ -55,6 +57,7 @@ GOOGLE_CLIENT_SECRET = ENV.fetch("GOOGLE_CLIENT_SECRET", "").strip
 GOOGLE_REDIRECT_URI = ENV.fetch("GOOGLE_REDIRECT_URI", "").strip
 GOOGLE_ALLOWED_EMAILS = ENV.fetch("GOOGLE_ALLOWED_EMAILS", AUTH_EMAIL).split(",").map { |email| email.strip.downcase }.reject(&:empty?)
 GOOGLE_ALLOWED_DOMAINS = ENV.fetch("GOOGLE_ALLOWED_DOMAINS", "").split(",").map { |domain| domain.strip.downcase.delete_prefix("@") }.reject(&:empty?)
+GOOGLE_LOGIN_ENABLED = ENV.fetch("ENABLE_GOOGLE_LOGIN", "false").strip.downcase == "true"
 
 MIME_TYPES = WEBrick::HTTPUtils::DefaultMimeTypes.merge(
   "js" => "application/javascript",
@@ -190,6 +193,126 @@ def base64url_decode(value)
   Base64.urlsafe_decode64(value + padding)
 end
 
+def normalize_email(email)
+  email.to_s.strip.downcase
+end
+
+def read_registered_users
+  return [] unless File.file?(USERS_FILE)
+
+  parsed = JSON.parse(File.read(USERS_FILE))
+  raise "The account file is not valid JSON." unless parsed.is_a?(Array)
+
+  parsed.select { |record| record.is_a?(Hash) && present?(record["id"]) && present?(record["email"]) }
+rescue Errno::EACCES
+  raise "The account file is not readable."
+rescue JSON::ParserError
+  raise "The account file is not valid JSON."
+end
+
+def write_registered_users(users)
+  Dir.mkdir(DATA_ROOT) unless Dir.exist?(DATA_ROOT)
+  File.write(USERS_FILE, JSON.pretty_generate(users) + "\n")
+end
+
+def registered_user_count
+  read_registered_users.length
+end
+
+def user_accounts_enabled?
+  ACCOUNT_REGISTRATION_ENABLED || registered_user_count.positive?
+end
+
+def find_registered_user_by_email(email)
+  normalized_email = normalize_email(email)
+  read_registered_users.find { |record| normalize_email(record["email"]) == normalized_email }
+end
+
+def find_registered_user_by_id(id)
+  read_registered_users.find { |record| record["id"].to_s == id.to_s }
+end
+
+def password_digest(password)
+  iterations = 310_000
+  salt = SecureRandom.random_bytes(16)
+  hash = OpenSSL::PKCS5.pbkdf2_hmac(password.to_s, salt, iterations, 32, "sha256")
+  ["pbkdf2_sha256", iterations, base64url_encode(salt), base64url_encode(hash)].join("$")
+end
+
+def verify_password_digest(password, digest)
+  algorithm, iterations_text, salt_text, hash_text = digest.to_s.split("$", 4)
+  return false unless algorithm == "pbkdf2_sha256"
+
+  iterations = iterations_text.to_i
+  return false if iterations < 100_000
+
+  salt = base64url_decode(salt_text.to_s)
+  expected = base64url_decode(hash_text.to_s)
+  return false if salt.empty? || expected.empty?
+
+  actual = OpenSSL::PKCS5.pbkdf2_hmac(password.to_s, salt, iterations, expected.bytesize, "sha256")
+  secure_compare(actual, expected)
+rescue ArgumentError
+  false
+end
+
+def public_user_from_record(record)
+  email = normalize_email(record["email"])
+  {
+    "sub" => "account:#{record.fetch("id", email)}",
+    "id" => record.fetch("id", "").to_s,
+    "email" => email,
+    "name" => record.fetch("name", "").to_s.strip.empty? ? email.split("@").first : record.fetch("name", "").to_s.strip,
+    "picture" => "",
+    "hostedDomain" => "",
+    "role" => record.fetch("role", "user").to_s,
+    "onboarded" => [true, "true", 1, "1"].include?(record["onboarded"]),
+    "onboarding" => record["onboarding"].is_a?(Hash) ? record["onboarding"] : nil,
+    "signedInAt" => Time.now.utc.iso8601
+  }
+end
+
+def validate_registration_payload(payload)
+  name = payload.fetch("name", "").to_s.strip
+  email = normalize_email(payload["email"])
+  password = payload.fetch("password", "").to_s
+  confirm_password = payload.fetch("confirmPassword", "").to_s
+  errors = []
+
+  errors << "Enter your name." if name.empty?
+  errors << "Enter a valid email address." unless email.match?(/\A[^@\s]+@[^@\s]+\.[^@\s]+\z/)
+  errors << "Use a password with at least 8 characters." if password.length < 8
+  errors << "Passwords do not match." if !confirm_password.empty? && password != confirm_password
+  if find_registered_user_by_email(email) || (password_login_configured? && secure_compare(AUTH_EMAIL, email))
+    errors << "An account already exists for that email."
+  end
+  raise errors.join(" ") unless errors.empty?
+
+  { name: name, email: email, password: password }
+end
+
+def register_user(payload)
+  raise "Account creation is not enabled for this workspace." unless ACCOUNT_REGISTRATION_ENABLED
+
+  clean = validate_registration_payload(payload)
+  users = read_registered_users
+  record = {
+    "id" => base64url_encode(SecureRandom.random_bytes(18)),
+    "email" => clean.fetch(:email),
+    "name" => clean.fetch(:name),
+    "passwordHash" => password_digest(clean.fetch(:password)),
+    "role" => users.empty? ? "admin" : "user",
+    "onboarded" => false,
+    "onboarding" => nil,
+    "createdAt" => Time.now.utc.iso8601,
+    "updatedAt" => Time.now.utc.iso8601
+  }
+
+  users << record
+  write_registered_users(users)
+  public_user_from_record(record)
+end
+
 def session_signature(payload)
   OpenSSL::HMAC.hexdigest("SHA256", SESSION_SECRET, payload)
 end
@@ -242,7 +365,8 @@ def password_login_configured?
 end
 
 def google_login_configured?
-  present?(GOOGLE_CLIENT_ID) &&
+  GOOGLE_LOGIN_ENABLED &&
+    present?(GOOGLE_CLIENT_ID) &&
     present?(GOOGLE_CLIENT_SECRET) &&
     (GOOGLE_ALLOWED_EMAILS.any? || GOOGLE_ALLOWED_DOMAINS.any?)
 end
@@ -380,10 +504,12 @@ def authenticate_google_callback(request)
 end
 
 def authenticate_user(email, password)
-  raise "Authentication is not configured. Set AUTH_EMAIL and AUTH_PASSWORD before starting the server." unless password_login_configured?
+  raise "Authentication is not configured. Enable account creation or set AUTH_EMAIL and AUTH_PASSWORD." unless user_accounts_enabled? || password_login_configured?
 
-  normalized_email = email.to_s.strip.downcase
+  normalized_email = normalize_email(email)
   password_value = password.to_s
+  registered_user = find_registered_user_by_email(normalized_email)
+  return public_user_from_record(registered_user) if registered_user && verify_password_digest(password_value, registered_user.fetch("passwordHash", ""))
 
   demo_credentials = DEMO_LOGIN_ENABLED &&
     secure_compare(normalized_email, DEFAULT_AUTH_EMAIL) &&
@@ -409,6 +535,25 @@ def authenticate_user(email, password)
   }
 end
 
+def update_registered_user_onboarding(session_user, onboarding)
+  sub = session_user.fetch("sub", "").to_s
+  return nil unless sub.start_with?("account:")
+
+  id = sub.delete_prefix("account:")
+  users = read_registered_users
+  index = users.find_index { |record| record.fetch("id", "").to_s == id }
+  return nil unless index
+
+  record = users[index].merge(
+    "onboarded" => true,
+    "onboarding" => onboarding,
+    "updatedAt" => Time.now.utc.iso8601
+  )
+  users[index] = record
+  write_registered_users(users)
+  public_user_from_record(record)
+end
+
 def require_user(request, response)
   user = current_user(request)
   return user if user
@@ -418,7 +563,7 @@ def require_user(request, response)
 end
 
 def gift_idea_admin?(user)
-  !!(user && GIFT_IDEA_ADMIN_EMAILS.include?(user.fetch("email", "").to_s.strip.downcase))
+  !!(user && (user.fetch("role", "").to_s == "admin" || GIFT_IDEA_ADMIN_EMAILS.include?(user.fetch("email", "").to_s.strip.downcase)))
 end
 
 def require_gift_idea_admin(request, response)
@@ -572,12 +717,16 @@ end
 
 server.mount_proc("/api/auth/config") do |request, response|
   user = current_user(request)
+  account_login_enabled = user_accounts_enabled?
   password_login_configured = password_login_configured?
   google_login_configured = google_login_configured?
   json_response(response, {
     ok: true,
-    configured: password_login_configured || google_login_configured,
-    authMode: google_login_configured ? "google" : "password",
+    configured: account_login_enabled || password_login_configured || google_login_configured,
+    authMode: "account",
+    accountLoginEnabled: account_login_enabled,
+    accountRegistrationEnabled: ACCOUNT_REGISTRATION_ENABLED,
+    hasRegisteredUsers: registered_user_count.positive?,
     passwordLoginEnabled: password_login_configured,
     googleLoginEnabled: google_login_configured,
     demoLoginEnabled: DEMO_LOGIN_ENABLED,
@@ -587,6 +736,20 @@ server.mount_proc("/api/auth/config") do |request, response|
       giftIdeaAdmin: gift_idea_admin?(user)
     }
   })
+end
+
+server.mount_proc("/api/auth/register") do |request, response|
+  begin
+    payload = JSON.parse(request.body.to_s)
+    user = register_user(payload)
+    response["Set-Cookie"] = session_cookie(user)
+    json_response(response, { ok: true, user: user })
+  rescue JSON::ParserError
+    json_response(response, { ok: false, errors: ["Request body must be valid JSON."] }, 400)
+  rescue StandardError => error
+    status = ACCOUNT_REGISTRATION_ENABLED ? 400 : 403
+    json_response(response, { ok: false, errors: [error.message] }, status)
+  end
 end
 
 server.mount_proc("/api/auth/google/start") do |request, response|
@@ -641,7 +804,8 @@ server.mount_proc("/api/auth/onboarding") do |request, response|
       "useCase" => payload["useCase"].to_s.strip,
       "completedAt" => Time.now.utc.iso8601
     }
-    updated_user = user.merge("onboarded" => true, "onboarding" => onboarding)
+    updated_user = update_registered_user_onboarding(user, onboarding) ||
+      user.merge("onboarded" => true, "onboarding" => onboarding)
     response["Set-Cookie"] = session_cookie(updated_user)
     json_response(response, { ok: true, user: updated_user })
   rescue JSON::ParserError

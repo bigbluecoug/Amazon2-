@@ -98,8 +98,8 @@
     <section class="auth-gate" id="authGate" hidden>
       <form class="auth-panel" id="signInPanel">
         <p class="launch-note">Secure workspace</p>
-        <h1>Sign in before gifting.</h1>
-        <p class="lede">GiftFlow keeps prospect lists, gift messages, and Amazon automation controls behind a protected workspace login.</p>
+        <h1>Sign in to GiftFlow.</h1>
+        <p class="lede">GiftFlow keeps prospect lists, gift messages, and Amazon automation controls behind a protected workspace account.</p>
         <div class="form-grid two-col auth-fields" id="passwordLoginFields">
           <label>
             <span>Email address</span>
@@ -111,21 +111,51 @@
           </label>
         </div>
         <div class="auth-actions">
-          <button class="button button-dark" id="googleLoginButton" type="button" hidden>Continue with Google</button>
           <button class="button button-dark" id="passwordSignInButton" type="submit">Sign in</button>
+          <button class="button button-light" id="showCreateAccountButton" type="button">Create account</button>
           <button class="button button-light" id="demoLoginButton" type="button" hidden>Open demo workspace</button>
           <button class="button button-light" id="backToIntroButton" type="button">Back to intro</button>
         </div>
         <p class="auth-status" id="authStatus">Checking login setup...</p>
         <details class="auth-setup">
-          <summary>Temporary login setup</summary>
+          <summary>Account setup</summary>
           <ol>
-            <li>Start this app with <code>AUTH_EMAIL</code>, <code>AUTH_PASSWORD</code>, and a long random <code>SESSION_SECRET</code>.</li>
-            <li>For Google login, set <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>, and <code>GOOGLE_ALLOWED_EMAILS</code>.</li>
-            <li>Share those credentials only with teammates who should access campaign and prospect data.</li>
-            <li>Replace this temporary login with your production identity provider before going live.</li>
+            <li>New accounts are stored securely on the server with hashed passwords.</li>
+            <li>The first created account becomes the gift ideas admin.</li>
+            <li>Set <code>ALLOW_ACCOUNT_REGISTRATION=false</code> after creating the accounts you want.</li>
+            <li>Keep a long random <code>SESSION_SECRET</code> set on Forge.</li>
           </ol>
         </details>
+      </form>
+
+      <form class="auth-panel" id="createAccountPanel" hidden>
+        <p class="launch-note">Create account</p>
+        <h1>Open your workspace.</h1>
+        <p class="lede">Create a private GiftFlow account with an email and password. You will finish workspace setup after signing in.</p>
+        <div class="form-grid two-col auth-fields">
+          <label>
+            <span>Your name</span>
+            <input id="createName" type="text" autocomplete="name" required>
+          </label>
+          <label>
+            <span>Email address</span>
+            <input id="createEmail" type="email" autocomplete="email" required>
+          </label>
+          <label>
+            <span>Password</span>
+            <input id="createPassword" type="password" autocomplete="new-password" minlength="8" required>
+          </label>
+          <label>
+            <span>Confirm password</span>
+            <input id="createConfirmPassword" type="password" autocomplete="new-password" minlength="8" required>
+          </label>
+        </div>
+        <div class="auth-actions">
+          <button class="button button-dark" type="submit">Create account</button>
+          <button class="button button-light" id="showSignInButton" type="button">I already have an account</button>
+          <button class="button button-light" id="createBackToIntroButton" type="button">Back to intro</button>
+        </div>
+        <p class="auth-status" id="createAccountStatus">Use at least 8 characters for your password.</p>
       </form>
 
       <form class="auth-panel onboarding-panel" id="onboardingPanel" hidden>

@@ -156,7 +156,14 @@ async function initAuth() {
       showLanding();
     }
   } catch (_error) {
-    authConfig = { configured: false, passwordLoginEnabled: false, googleLoginEnabled: false, demoLoginEnabled: false };
+    authConfig = {
+      configured: false,
+      accountLoginEnabled: false,
+      accountRegistrationEnabled: false,
+      passwordLoginEnabled: false,
+      googleLoginEnabled: false,
+      demoLoginEnabled: false
+    };
     if (authMessage) {
       showSignIn(authMessage);
     } else {
@@ -183,6 +190,7 @@ function showLanding() {
   byId("appShell").hidden = true;
   byId("authGate").hidden = true;
   byId("signInPanel").hidden = false;
+  byId("createAccountPanel").hidden = true;
   byId("onboardingPanel").hidden = true;
 }
 
@@ -193,11 +201,12 @@ function showSignIn(message = "") {
   byId("appShell").hidden = true;
   byId("authGate").hidden = false;
   byId("signInPanel").hidden = false;
+  byId("createAccountPanel").hidden = true;
   byId("onboardingPanel").hidden = true;
-  const passwordLoginEnabled = Boolean(authConfig?.passwordLoginEnabled);
-  byId("googleLoginButton").hidden = !authConfig?.googleLoginEnabled;
+  const passwordLoginEnabled = Boolean(authConfig?.accountLoginEnabled || authConfig?.passwordLoginEnabled);
   byId("passwordLoginFields").hidden = !passwordLoginEnabled;
   byId("passwordSignInButton").hidden = !passwordLoginEnabled;
+  byId("showCreateAccountButton").hidden = !authConfig?.accountRegistrationEnabled;
   byId("demoLoginButton").hidden = !authConfig?.demoLoginEnabled;
   byId("authEmail").required = passwordLoginEnabled;
   byId("authPassword").required = passwordLoginEnabled;
@@ -205,22 +214,22 @@ function showSignIn(message = "") {
   byId("authStatus").textContent = message || authReadyMessage();
   if (passwordLoginEnabled) {
     byId("authEmail").focus();
-  } else if (authConfig?.googleLoginEnabled) {
-    byId("googleLoginButton").focus();
+  } else if (authConfig?.accountRegistrationEnabled) {
+    byId("showCreateAccountButton").focus();
   }
 }
 
 function authReadyMessage() {
   if (!authConfig?.configured) {
-    return "Login is not configured yet. Set Google OAuth or workspace password credentials, then restart the server.";
+    return "Login is not configured yet. Enable account creation or set workspace password credentials, then restart the server.";
   }
 
-  if (authConfig.googleLoginEnabled && !authConfig.passwordLoginEnabled) {
-    return "Continue with Google to open your private workspace.";
+  if (authConfig.accountRegistrationEnabled && !authConfig.hasRegisteredUsers) {
+    return "Create the first account to open the workspace. The first account can edit gift ideas.";
   }
 
-  if (authConfig.googleLoginEnabled) {
-    return "Continue with Google or use your workspace email and password.";
+  if (authConfig.accountRegistrationEnabled) {
+    return "Sign in or create an account to continue.";
   }
 
   if (authConfig.demoLoginEnabled) {
@@ -228,6 +237,24 @@ function authReadyMessage() {
   }
 
   return "Use your workspace email and password to continue.";
+}
+
+function showCreateAccount(message = "") {
+  if (!authConfig?.accountRegistrationEnabled) {
+    showSignIn("Account creation is not enabled for this workspace.");
+    return;
+  }
+
+  byId("landingHeader").hidden = true;
+  byId("landingPage").hidden = true;
+  byId("appHeader").hidden = true;
+  byId("appShell").hidden = true;
+  byId("authGate").hidden = false;
+  byId("signInPanel").hidden = true;
+  byId("createAccountPanel").hidden = false;
+  byId("onboardingPanel").hidden = true;
+  byId("createAccountStatus").textContent = message || "Use at least 8 characters for your password.";
+  byId("createName").focus();
 }
 
 function routeAuthenticatedUser() {
@@ -245,6 +272,7 @@ function showOnboarding() {
   byId("appShell").hidden = true;
   byId("authGate").hidden = false;
   byId("signInPanel").hidden = true;
+  byId("createAccountPanel").hidden = true;
   byId("onboardingPanel").hidden = false;
 }
 
@@ -283,20 +311,41 @@ async function requestSignIn(email, password, statusMessage = "Checking credenti
 
 async function submitSignIn(event) {
   event.preventDefault();
-  if (!authConfig?.passwordLoginEnabled) return;
+  if (!authConfig?.accountLoginEnabled && !authConfig?.passwordLoginEnabled) return;
   const user = await requestSignIn(fieldValue("authEmail"), fieldValue("authPassword"));
   if (!user) return;
 
   routeAuthenticatedUser();
 }
 
-function openGoogleWorkspace() {
-  if (!authConfig?.googleLoginEnabled) {
-    showSignIn("Google login is not configured for this workspace.");
+async function submitCreateAccount(event) {
+  event.preventDefault();
+  if (!authConfig?.accountRegistrationEnabled) {
+    showSignIn("Account creation is not enabled for this workspace.");
     return;
   }
 
-  window.location.href = "/api/auth/google/start";
+  byId("createAccountStatus").textContent = "Creating your account...";
+  const result = await fetch("/api/auth/register", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: fieldValue("createName"),
+      email: fieldValue("createEmail"),
+      password: byId("createPassword").value,
+      confirmPassword: byId("createConfirmPassword").value
+    })
+  });
+  const payload = await result.json();
+
+  if (!payload.ok) {
+    byId("createAccountStatus").textContent = payload.errors?.join(" ") || "Could not create that account.";
+    return;
+  }
+
+  currentUser = payload.user;
+  routeAuthenticatedUser();
 }
 
 async function openDemoWorkspace() {
@@ -1171,13 +1220,16 @@ function wireButtons() {
   byId("getStartedButton").addEventListener("click", () => {
     showSignIn();
   });
-  byId("googleLoginButton").addEventListener("click", openGoogleWorkspace);
+  byId("showCreateAccountButton").addEventListener("click", () => showCreateAccount());
+  byId("showSignInButton").addEventListener("click", () => showSignIn());
   byId("demoLoginButton").addEventListener("click", openDemoWorkspace);
   byId("backToIntroButton").addEventListener("click", showLanding);
+  byId("createBackToIntroButton").addEventListener("click", showLanding);
   byId("saveButton").addEventListener("click", saveState);
   byId("heroRunButton").addEventListener("click", processDueGifts);
   byId("logoutButton").addEventListener("click", signOut);
   byId("signInPanel").addEventListener("submit", submitSignIn);
+  byId("createAccountPanel").addEventListener("submit", submitCreateAccount);
   byId("onboardingPanel").addEventListener("submit", submitOnboarding);
   document.querySelectorAll(".need-help-link").forEach((link) => {
     link.addEventListener("click", (event) => {

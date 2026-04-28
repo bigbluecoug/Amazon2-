@@ -5,6 +5,7 @@ define('GIFT_ROOT', __DIR__);
 define('GIFT_PUBLIC_ROOT', GIFT_ROOT . '/public');
 define('GIFT_DATA_ROOT', GIFT_ROOT . '/data');
 define('GIFT_IDEAS_FILE', GIFT_DATA_ROOT . '/gift-ideas.json');
+define('USERS_FILE', GIFT_DATA_ROOT . '/users.json');
 define('DEFAULT_AUTH_EMAIL', 'team@giftflow.local');
 define('DEFAULT_AUTH_PASSWORD', 'giftflow-demo');
 define('SESSION_COOKIE', 'giftflow_session');
@@ -78,6 +79,11 @@ function password_login_configured(): bool
     return present(auth_email()) && present(auth_password());
 }
 
+function account_registration_enabled(): bool
+{
+    return strtolower(trim(env_value('ALLOW_ACCOUNT_REGISTRATION', 'true'))) !== 'false';
+}
+
 function gift_idea_admin_emails(): array
 {
     $raw = env_value('GIFT_IDEA_ADMIN_EMAILS', auth_email());
@@ -132,7 +138,9 @@ function google_allowed_domains(): array
 
 function google_login_configured(): bool
 {
-    return present(google_client_id()) &&
+    $enabled = strtolower(trim(env_value('ENABLE_GOOGLE_LOGIN', 'false'))) === 'true';
+    return $enabled &&
+        present(google_client_id()) &&
         present(google_client_secret()) &&
         (count(google_allowed_emails()) > 0 || count(google_allowed_domains()) > 0);
 }
@@ -259,6 +267,190 @@ function base64url_decode(string $value): string
     $padding = str_repeat('=', (4 - strlen($value) % 4) % 4);
     $decoded = base64_decode(strtr($value . $padding, '-_', '+/'), true);
     return $decoded === false ? '' : $decoded;
+}
+
+function normalize_email($email): string
+{
+    return strtolower(trim((string) $email));
+}
+
+function read_registered_users(): array
+{
+    if (!is_file(USERS_FILE)) {
+        return [];
+    }
+
+    if (!is_readable(USERS_FILE)) {
+        throw new RuntimeException('The account file is not readable.');
+    }
+
+    $decoded = json_decode((string) file_get_contents(USERS_FILE), true);
+    if (!is_array($decoded)) {
+        throw new RuntimeException('The account file is not valid JSON.');
+    }
+
+    return array_values(array_filter($decoded, function ($record): bool {
+        return is_array($record) && present($record['id'] ?? '') && present($record['email'] ?? '');
+    }));
+}
+
+function write_registered_users(array $users): void
+{
+    if (!is_dir(GIFT_DATA_ROOT)) {
+        mkdir(GIFT_DATA_ROOT, 0775, true);
+    }
+
+    file_put_contents(USERS_FILE, json_encode(array_values($users), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL, LOCK_EX);
+}
+
+function registered_user_count(): int
+{
+    return count(read_registered_users());
+}
+
+function user_accounts_enabled(): bool
+{
+    return account_registration_enabled() || registered_user_count() > 0;
+}
+
+function find_registered_user_by_email(string $email): ?array
+{
+    $normalizedEmail = normalize_email($email);
+    foreach (read_registered_users() as $record) {
+        if (normalize_email($record['email'] ?? '') === $normalizedEmail) {
+            return $record;
+        }
+    }
+
+    return null;
+}
+
+function find_registered_user_by_id(string $id): ?array
+{
+    foreach (read_registered_users() as $record) {
+        if ((string) ($record['id'] ?? '') === $id) {
+            return $record;
+        }
+    }
+
+    return null;
+}
+
+function password_digest(string $password): string
+{
+    $iterations = 310000;
+    $salt = random_bytes(16);
+    $hash = hash_pbkdf2('sha256', $password, $salt, $iterations, 32, true);
+    return implode('$', [
+        'pbkdf2_sha256',
+        (string) $iterations,
+        base64url_encode($salt),
+        base64url_encode($hash),
+    ]);
+}
+
+function verify_password_digest(string $password, string $digest): bool
+{
+    $parts = explode('$', $digest);
+    if (count($parts) !== 4 || $parts[0] !== 'pbkdf2_sha256') {
+        return false;
+    }
+
+    $iterations = (int) $parts[1];
+    if ($iterations < 100000) {
+        return false;
+    }
+
+    $salt = base64url_decode($parts[2]);
+    $expected = base64url_decode($parts[3]);
+    if ($salt === '' || $expected === '') {
+        return false;
+    }
+
+    $actual = hash_pbkdf2('sha256', $password, $salt, $iterations, strlen($expected), true);
+    return hash_equals($expected, $actual);
+}
+
+function public_user_from_record(array $record): array
+{
+    $email = normalize_email($record['email'] ?? '');
+    return [
+        'sub' => 'account:' . (string) ($record['id'] ?? $email),
+        'id' => (string) ($record['id'] ?? ''),
+        'email' => $email,
+        'name' => trim((string) ($record['name'] ?? '')) ?: explode('@', $email)[0],
+        'picture' => '',
+        'hostedDomain' => '',
+        'role' => (string) ($record['role'] ?? 'user'),
+        'onboarded' => bool_value($record['onboarded'] ?? false),
+        'onboarding' => is_array($record['onboarding'] ?? null) ? $record['onboarding'] : null,
+        'signedInAt' => iso_now(),
+    ];
+}
+
+function validate_registration_payload(array $payload): array
+{
+    $name = trim((string) ($payload['name'] ?? ''));
+    $email = normalize_email($payload['email'] ?? '');
+    $password = (string) ($payload['password'] ?? '');
+    $confirmPassword = (string) ($payload['confirmPassword'] ?? '');
+    $errors = [];
+
+    if ($name === '') {
+        $errors[] = 'Enter your name.';
+    }
+
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = 'Enter a valid email address.';
+    }
+
+    if (strlen($password) < 8) {
+        $errors[] = 'Use a password with at least 8 characters.';
+    }
+
+    if ($confirmPassword !== '' && $password !== $confirmPassword) {
+        $errors[] = 'Passwords do not match.';
+    }
+
+    if (find_registered_user_by_email($email) !== null || (password_login_configured() && hash_equals(auth_email(), $email))) {
+        $errors[] = 'An account already exists for that email.';
+    }
+
+    if (count($errors) > 0) {
+        throw new InvalidArgumentException(implode(' ', $errors));
+    }
+
+    return [
+        'name' => $name,
+        'email' => $email,
+        'password' => $password,
+    ];
+}
+
+function register_user(array $payload): array
+{
+    if (!account_registration_enabled()) {
+        throw new RuntimeException('Account creation is not enabled for this workspace.');
+    }
+
+    $clean = validate_registration_payload($payload);
+    $users = read_registered_users();
+    $role = count($users) === 0 ? 'admin' : 'user';
+    $record = [
+        'id' => base64url_encode(random_bytes(18)),
+        'email' => $clean['email'],
+        'name' => $clean['name'],
+        'passwordHash' => password_digest($clean['password']),
+        'role' => $role,
+        'onboarded' => false,
+        'onboarding' => null,
+        'createdAt' => iso_now(),
+        'updatedAt' => iso_now(),
+    ];
+
+    $users[] = $record;
+    write_registered_users($users);
+    return public_user_from_record($record);
 }
 
 function session_signature(string $payload): string
@@ -546,16 +738,22 @@ function authenticate_google_callback(): array
 
 function authenticate_user($email, $password): array
 {
-    if (!password_login_configured()) {
-        throw new RuntimeException('Authentication is not configured. Set AUTH_EMAIL and AUTH_PASSWORD before starting the server.');
+    if (!user_accounts_enabled() && !password_login_configured()) {
+        throw new RuntimeException('Authentication is not configured. Enable account creation or set AUTH_EMAIL and AUTH_PASSWORD.');
     }
 
-    $normalizedEmail = strtolower(trim((string) $email));
+    $normalizedEmail = normalize_email($email);
     $passwordValue = (string) $password;
+    $registeredUser = find_registered_user_by_email($normalizedEmail);
+    if ($registeredUser !== null && verify_password_digest($passwordValue, (string) ($registeredUser['passwordHash'] ?? ''))) {
+        return public_user_from_record($registeredUser);
+    }
+
     $demoCredentials = demo_login_enabled() &&
         hash_equals(DEFAULT_AUTH_EMAIL, $normalizedEmail) &&
         hash_equals(DEFAULT_AUTH_PASSWORD, $passwordValue);
-    $privateCredentials = hash_equals(auth_email(), $normalizedEmail) &&
+    $privateCredentials = password_login_configured() &&
+        hash_equals(auth_email(), $normalizedEmail) &&
         hash_equals(auth_password(), $passwordValue);
 
     if (!$demoCredentials && !$privateCredentials) {
@@ -577,6 +775,31 @@ function authenticate_user($email, $password): array
     ];
 }
 
+function update_registered_user_onboarding(array $sessionUser, array $onboarding): ?array
+{
+    $sub = (string) ($sessionUser['sub'] ?? '');
+    if (strpos($sub, 'account:') !== 0) {
+        return null;
+    }
+
+    $id = substr($sub, strlen('account:'));
+    $users = read_registered_users();
+    foreach ($users as $index => $record) {
+        if ((string) ($record['id'] ?? '') !== $id) {
+            continue;
+        }
+
+        $record['onboarded'] = true;
+        $record['onboarding'] = $onboarding;
+        $record['updatedAt'] = iso_now();
+        $users[$index] = $record;
+        write_registered_users($users);
+        return public_user_from_record($record);
+    }
+
+    return null;
+}
+
 function require_user(): ?array
 {
     $user = current_user();
@@ -592,6 +815,10 @@ function gift_idea_admin($user): bool
 {
     if (!is_array($user)) {
         return false;
+    }
+
+    if (($user['role'] ?? '') === 'admin') {
+        return true;
     }
 
     return in_array(strtolower(trim((string) ($user['email'] ?? ''))), gift_idea_admin_emails(), true);
@@ -853,12 +1080,16 @@ function handle_request(): void
 
     if ($path === '/api/auth/config') {
         $user = current_user();
+        $accountLoginEnabled = user_accounts_enabled();
         $passwordLoginConfigured = password_login_configured();
         $googleLoginConfigured = google_login_configured();
         json_response([
             'ok' => true,
-            'configured' => $passwordLoginConfigured || $googleLoginConfigured,
-            'authMode' => $googleLoginConfigured ? 'google' : 'password',
+            'configured' => $accountLoginEnabled || $passwordLoginConfigured || $googleLoginConfigured,
+            'authMode' => 'account',
+            'accountLoginEnabled' => $accountLoginEnabled,
+            'accountRegistrationEnabled' => account_registration_enabled(),
+            'hasRegisteredUsers' => registered_user_count() > 0,
             'passwordLoginEnabled' => $passwordLoginConfigured,
             'googleLoginEnabled' => $googleLoginConfigured,
             'demoLoginEnabled' => demo_login_enabled(),
@@ -868,6 +1099,20 @@ function handle_request(): void
                 'giftIdeaAdmin' => gift_idea_admin($user),
             ],
         ]);
+        return;
+    }
+
+    if ($path === '/api/auth/register') {
+        try {
+            $payload = read_json_body();
+            $user = register_user($payload);
+            set_session_cookie($user);
+            json_response(['ok' => true, 'user' => $user]);
+        } catch (InvalidArgumentException $error) {
+            json_response(['ok' => false, 'errors' => [$error->getMessage()]], 400);
+        } catch (Throwable $error) {
+            json_response(['ok' => false, 'errors' => [$error->getMessage()]], 403);
+        }
         return;
     }
 
@@ -930,7 +1175,8 @@ function handle_request(): void
                 'useCase' => trim((string) ($payload['useCase'] ?? '')),
                 'completedAt' => iso_now(),
             ];
-            $updatedUser = array_merge($user, ['onboarded' => true, 'onboarding' => $onboarding]);
+            $updatedUser = update_registered_user_onboarding($user, $onboarding) ??
+                array_merge($user, ['onboarded' => true, 'onboarding' => $onboarding]);
             set_session_cookie($updatedUser);
             json_response(['ok' => true, 'user' => $updatedUser]);
         } catch (InvalidArgumentException $error) {
