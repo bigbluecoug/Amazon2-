@@ -1,0 +1,9 @@
+{
+  "name": "bigbluecoug/amazon2",
+  "description": "GiftFlow Studio PHP and static site deployment.",
+  "type": "project",
+  "license": "proprietary",
+  "require": {
+    "php": ">=8.1"
+  }
+}
