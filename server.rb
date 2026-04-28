@@ -231,17 +231,26 @@ def authenticate_user(email, password)
   normalized_email = email.to_s.strip.downcase
   password_value = password.to_s
 
+  demo_credentials = DEMO_LOGIN_ENABLED &&
+    secure_compare(normalized_email, DEFAULT_AUTH_EMAIL) &&
+    secure_compare(password_value, DEFAULT_AUTH_PASSWORD)
   valid_email = secure_compare(normalized_email, AUTH_EMAIL)
   valid_password = secure_compare(password_value, AUTH_PASSWORD)
+  if demo_credentials
+    valid_email = true
+    valid_password = true
+  end
   raise "Email or password is incorrect." unless valid_email && valid_password
 
+  signed_in_email = demo_credentials ? DEFAULT_AUTH_EMAIL : AUTH_EMAIL
+  signed_in_name = demo_credentials ? "GiftFlow Demo" : (AUTH_NAME.empty? ? AUTH_EMAIL.split("@").first : AUTH_NAME)
   {
-    "sub" => "local-auth:#{AUTH_EMAIL}",
-    "email" => AUTH_EMAIL,
-    "name" => AUTH_NAME.empty? ? AUTH_EMAIL.split("@").first : AUTH_NAME,
+    "sub" => "local-auth:#{signed_in_email}",
+    "email" => signed_in_email,
+    "name" => signed_in_name,
     "picture" => "",
     "hostedDomain" => "",
-    "onboarded" => false,
+    "onboarded" => demo_credentials,
     "signedInAt" => Time.now.utc.iso8601
   }
 end
@@ -413,6 +422,7 @@ server.mount_proc("/api/auth/config") do |request, response|
     ok: true,
     configured: present?(AUTH_EMAIL) && present?(AUTH_PASSWORD),
     authMode: "password",
+    demoLoginEnabled: DEMO_LOGIN_ENABLED,
     usingDefaultCredentials: USING_DEFAULT_CREDENTIALS,
     user: user,
     permissions: {

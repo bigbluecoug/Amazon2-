@@ -275,18 +275,27 @@ function authenticate_user($email, $password): array
 
     $normalizedEmail = strtolower(trim((string) $email));
     $passwordValue = (string) $password;
-    if (!hash_equals(auth_email(), $normalizedEmail) || !hash_equals(auth_password(), $passwordValue)) {
+    $demoCredentials = demo_login_enabled() &&
+        hash_equals(DEFAULT_AUTH_EMAIL, $normalizedEmail) &&
+        hash_equals(DEFAULT_AUTH_PASSWORD, $passwordValue);
+    $privateCredentials = hash_equals(auth_email(), $normalizedEmail) &&
+        hash_equals(auth_password(), $passwordValue);
+
+    if (!$demoCredentials && !$privateCredentials) {
         throw new RuntimeException('Email or password is incorrect.');
     }
 
     $name = auth_name();
+    $signedInEmail = $demoCredentials ? DEFAULT_AUTH_EMAIL : auth_email();
+    $signedInName = $demoCredentials ? 'GiftFlow Demo' : ($name === '' ? explode('@', auth_email())[0] : $name);
+
     return [
-        'sub' => 'local-auth:' . auth_email(),
-        'email' => auth_email(),
-        'name' => $name === '' ? explode('@', auth_email())[0] : $name,
+        'sub' => 'local-auth:' . $signedInEmail,
+        'email' => $signedInEmail,
+        'name' => $signedInName,
         'picture' => '',
         'hostedDomain' => '',
-        'onboarded' => false,
+        'onboarded' => $demoCredentials,
         'signedInAt' => iso_now(),
     ];
 }
@@ -571,6 +580,7 @@ function handle_request(): void
             'ok' => true,
             'configured' => present(auth_email()) && present(auth_password()),
             'authMode' => 'password',
+            'demoLoginEnabled' => demo_login_enabled(),
             'usingDefaultCredentials' => using_default_credentials(),
             'user' => $user,
             'permissions' => [

@@ -175,7 +175,7 @@ function showSignIn(message = "") {
   byId("authGate").hidden = false;
   byId("signInPanel").hidden = false;
   byId("onboardingPanel").hidden = true;
-  byId("demoLoginButton").hidden = !authConfig?.usingDefaultCredentials;
+  byId("demoLoginButton").hidden = !authConfig?.demoLoginEnabled;
 
   byId("authStatus").textContent = message || authReadyMessage();
   byId("authEmail").focus();
@@ -186,8 +186,8 @@ function authReadyMessage() {
     return "Login is not configured yet. Set AUTH_EMAIL and AUTH_PASSWORD, then restart the server.";
   }
 
-  if (authConfig.usingDefaultCredentials) {
-    return "Local demo login is enabled: team@giftflow.local / giftflow-demo. Set AUTH_EMAIL and AUTH_PASSWORD before sharing this workspace.";
+  if (authConfig.demoLoginEnabled) {
+    return "Demo login is enabled: team@giftflow.local / giftflow-demo.";
   }
 
   return "Use your workspace email and password to continue.";
@@ -253,8 +253,8 @@ async function submitSignIn(event) {
 }
 
 async function openDemoWorkspace() {
-  if (!authConfig?.usingDefaultCredentials) {
-    showSignIn("Demo login is only available when the local default credentials are enabled.");
+  if (!authConfig?.demoLoginEnabled) {
+    showSignIn("Demo login is not enabled for this workspace.");
     return;
   }
 
