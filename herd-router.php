@@ -9,6 +9,11 @@ define('DEFAULT_AUTH_EMAIL', 'team@giftflow.local');
 define('DEFAULT_AUTH_PASSWORD', 'giftflow-demo');
 define('SESSION_COOKIE', 'giftflow_session');
 define('SESSION_MAX_AGE', 60 * 60 * 24 * 7);
+define('GOOGLE_STATE_COOKIE', 'giftflow_google_state');
+define('GOOGLE_STATE_MAX_AGE', 600);
+define('GOOGLE_AUTH_ENDPOINT', 'https://accounts.google.com/o/oauth2/v2/auth');
+define('GOOGLE_TOKEN_ENDPOINT', 'https://oauth2.googleapis.com/token');
+define('GOOGLE_USERINFO_ENDPOINT', 'https://openidconnect.googleapis.com/v1/userinfo');
 
 load_env_file(GIFT_ROOT . '/.env');
 handle_request();
@@ -68,6 +73,11 @@ function auth_name(): string
     return trim(env_value('AUTH_NAME', 'GiftFlow Team'));
 }
 
+function password_login_configured(): bool
+{
+    return present(auth_email()) && present(auth_password());
+}
+
 function gift_idea_admin_emails(): array
 {
     $raw = env_value('GIFT_IDEA_ADMIN_EMAILS', auth_email());
@@ -89,6 +99,64 @@ function session_secret(): string
 function using_default_credentials(): bool
 {
     return demo_login_enabled() && (getenv('AUTH_EMAIL') === false || getenv('AUTH_PASSWORD') === false);
+}
+
+function google_client_id(): string
+{
+    return trim(env_value('GOOGLE_CLIENT_ID', ''));
+}
+
+function google_client_secret(): string
+{
+    return trim(env_value('GOOGLE_CLIENT_SECRET', ''));
+}
+
+function google_allowed_emails(): array
+{
+    $raw = trim(env_value('GOOGLE_ALLOWED_EMAILS', ''));
+    if ($raw === '' && present(auth_email())) {
+        $raw = auth_email();
+    }
+
+    return array_values(array_filter(array_map(function (string $email): string {
+        return strtolower(trim($email));
+    }, explode(',', $raw))));
+}
+
+function google_allowed_domains(): array
+{
+    return array_values(array_filter(array_map(function (string $domain): string {
+        return strtolower(ltrim(trim($domain), '@'));
+    }, explode(',', env_value('GOOGLE_ALLOWED_DOMAINS', '')))));
+}
+
+function google_login_configured(): bool
+{
+    return present(google_client_id()) &&
+        present(google_client_secret()) &&
+        (count(google_allowed_emails()) > 0 || count(google_allowed_domains()) > 0);
+}
+
+function app_origin(): string
+{
+    $host = trim((string) ($_SERVER['HTTP_X_FORWARDED_HOST'] ?? $_SERVER['HTTP_HOST'] ?? ''));
+    if ($host === '') {
+        $host = '127.0.0.1';
+    }
+
+    $proto = trim((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+    if ($proto === '') {
+        $proto = is_https_request() ? 'https' : 'http';
+    }
+    $proto = strtolower(explode(',', $proto)[0]);
+
+    return $proto . '://' . $host;
+}
+
+function google_redirect_uri(): string
+{
+    $configured = trim(env_value('GOOGLE_REDIRECT_URI', ''));
+    return $configured !== '' ? $configured : app_origin() . '/api/auth/google/callback';
 }
 
 function present($value): bool
@@ -267,9 +335,218 @@ function current_user(): ?array
     return $decoded;
 }
 
+function bool_value($value): bool
+{
+    return $value === true || $value === 1 || $value === '1' || strtolower((string) $value) === 'true';
+}
+
+function set_google_state_cookie(string $state): void
+{
+    setcookie(GOOGLE_STATE_COOKIE, $state, [
+        'expires' => time() + GOOGLE_STATE_MAX_AGE,
+        'path' => '/',
+        'httponly' => true,
+        'samesite' => 'Lax',
+        'secure' => is_https_request(),
+    ]);
+}
+
+function clear_google_state_cookie(): void
+{
+    setcookie(GOOGLE_STATE_COOKIE, '', [
+        'expires' => time() - 3600,
+        'path' => '/',
+        'httponly' => true,
+        'samesite' => 'Lax',
+        'secure' => is_https_request(),
+    ]);
+}
+
+function redirect_response(string $location): void
+{
+    http_response_code(302);
+    header('Location: ' . $location);
+}
+
+function redirect_auth_error(string $message): void
+{
+    clear_google_state_cookie();
+    redirect_response('/?authError=' . rawurlencode($message));
+}
+
+function google_authorization_url(string $state): string
+{
+    return GOOGLE_AUTH_ENDPOINT . '?' . http_build_query([
+        'client_id' => google_client_id(),
+        'redirect_uri' => google_redirect_uri(),
+        'response_type' => 'code',
+        'scope' => 'openid profile email',
+        'state' => $state,
+        'prompt' => 'select_account',
+    ]);
+}
+
+function http_json_request(string $method, string $url, array $headers = [], string $body = ''): array
+{
+    $status = 0;
+    if (function_exists('curl_init')) {
+        $curl = curl_init($url);
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($curl, CURLOPT_CUSTOMREQUEST, $method);
+        curl_setopt($curl, CURLOPT_TIMEOUT, 12);
+        if (count($headers) > 0) {
+            curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+        }
+        if ($body !== '') {
+            curl_setopt($curl, CURLOPT_POSTFIELDS, $body);
+        }
+
+        $response = curl_exec($curl);
+        $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+        $curlError = curl_error($curl);
+        curl_close($curl);
+
+        if ($response === false) {
+            throw new RuntimeException('Google sign-in could not reach Google. ' . ($curlError ?: 'Check outbound HTTPS from Forge.'));
+        }
+    } else {
+        $headerText = implode("\r\n", $headers);
+        $options = [
+            'http' => [
+                'method' => $method,
+                'header' => $headerText,
+                'ignore_errors' => true,
+                'timeout' => 12,
+            ],
+        ];
+
+        if ($body !== '') {
+            $options['http']['content'] = $body;
+        }
+
+        $response = @file_get_contents($url, false, stream_context_create($options));
+        if ($response === false) {
+            throw new RuntimeException('Google sign-in could not reach Google. Check outbound HTTPS from Forge.');
+        }
+
+        $responseHeaders = $http_response_header ?? [];
+        if (isset($responseHeaders[0]) && preg_match('/\s(\d{3})\s/', $responseHeaders[0], $matches)) {
+            $status = (int) $matches[1];
+        }
+    }
+
+    $decoded = json_decode($response, true);
+    if (!is_array($decoded)) {
+        throw new RuntimeException('Google returned an unreadable response.');
+    }
+
+    if ($status < 200 || $status >= 300) {
+        $reason = (string) ($decoded['error_description'] ?? $decoded['error'] ?? 'Google sign-in failed.');
+        throw new RuntimeException($reason);
+    }
+
+    return $decoded;
+}
+
+function exchange_google_code(string $code): array
+{
+    return http_json_request(
+        'POST',
+        GOOGLE_TOKEN_ENDPOINT,
+        ['Content-Type: application/x-www-form-urlencoded'],
+        http_build_query([
+            'code' => $code,
+            'client_id' => google_client_id(),
+            'client_secret' => google_client_secret(),
+            'redirect_uri' => google_redirect_uri(),
+            'grant_type' => 'authorization_code',
+        ])
+    );
+}
+
+function fetch_google_profile(string $accessToken): array
+{
+    return http_json_request(
+        'GET',
+        GOOGLE_USERINFO_ENDPOINT,
+        ['Authorization: Bearer ' . $accessToken]
+    );
+}
+
+function google_profile_allowed(string $email, string $hostedDomain): bool
+{
+    $allowedEmails = google_allowed_emails();
+    if (count($allowedEmails) > 0 && in_array($email, $allowedEmails, true)) {
+        return true;
+    }
+
+    $allowedDomains = google_allowed_domains();
+    if (count($allowedDomains) > 0 && $hostedDomain !== '' && in_array($hostedDomain, $allowedDomains, true)) {
+        return true;
+    }
+
+    return false;
+}
+
+function google_user_from_profile(array $profile): array
+{
+    $email = strtolower(trim((string) ($profile['email'] ?? '')));
+    $hostedDomain = strtolower(trim((string) ($profile['hd'] ?? '')));
+    $verified = bool_value($profile['email_verified'] ?? $profile['verified_email'] ?? false);
+
+    if ($email === '' || !$verified) {
+        throw new RuntimeException('Google did not return a verified email address.');
+    }
+
+    if (!google_profile_allowed($email, $hostedDomain)) {
+        throw new RuntimeException('That Google account is not authorized for this workspace.');
+    }
+
+    $sub = trim((string) ($profile['sub'] ?? ''));
+    return [
+        'sub' => 'google:' . ($sub !== '' ? $sub : $email),
+        'email' => $email,
+        'name' => trim((string) ($profile['name'] ?? '')) ?: explode('@', $email)[0],
+        'picture' => trim((string) ($profile['picture'] ?? '')),
+        'hostedDomain' => $hostedDomain,
+        'onboarded' => true,
+        'signedInAt' => iso_now(),
+    ];
+}
+
+function authenticate_google_callback(): array
+{
+    if (!google_login_configured()) {
+        throw new RuntimeException('Google login is not configured for this workspace.');
+    }
+
+    $expectedState = (string) ($_COOKIE[GOOGLE_STATE_COOKIE] ?? '');
+    $actualState = (string) ($_GET['state'] ?? '');
+    if ($expectedState === '' || $actualState === '' || !hash_equals($expectedState, $actualState)) {
+        throw new RuntimeException('Google sign-in expired. Try again.');
+    }
+
+    if (present($_GET['error'] ?? '')) {
+        throw new RuntimeException('Google sign-in was canceled or denied.');
+    }
+
+    $code = trim((string) ($_GET['code'] ?? ''));
+    if ($code === '') {
+        throw new RuntimeException('Google did not return a sign-in code.');
+    }
+
+    $token = exchange_google_code($code);
+    $accessToken = trim((string) ($token['access_token'] ?? ''));
+    if ($accessToken === '') {
+        throw new RuntimeException('Google did not return an access token.');
+    }
+
+    return google_user_from_profile(fetch_google_profile($accessToken));
+}
+
 function authenticate_user($email, $password): array
 {
-    if (!present(auth_email()) || !present(auth_password())) {
+    if (!password_login_configured()) {
         throw new RuntimeException('Authentication is not configured. Set AUTH_EMAIL and AUTH_PASSWORD before starting the server.');
     }
 
@@ -576,10 +853,14 @@ function handle_request(): void
 
     if ($path === '/api/auth/config') {
         $user = current_user();
+        $passwordLoginConfigured = password_login_configured();
+        $googleLoginConfigured = google_login_configured();
         json_response([
             'ok' => true,
-            'configured' => present(auth_email()) && present(auth_password()),
-            'authMode' => 'password',
+            'configured' => $passwordLoginConfigured || $googleLoginConfigured,
+            'authMode' => $googleLoginConfigured ? 'google' : 'password',
+            'passwordLoginEnabled' => $passwordLoginConfigured,
+            'googleLoginEnabled' => $googleLoginConfigured,
             'demoLoginEnabled' => demo_login_enabled(),
             'usingDefaultCredentials' => using_default_credentials(),
             'user' => $user,
@@ -587,6 +868,30 @@ function handle_request(): void
                 'giftIdeaAdmin' => gift_idea_admin($user),
             ],
         ]);
+        return;
+    }
+
+    if ($path === '/api/auth/google/start') {
+        if (!google_login_configured()) {
+            redirect_auth_error('Google login is not configured yet.');
+            return;
+        }
+
+        $state = base64url_encode(random_bytes(32));
+        set_google_state_cookie($state);
+        redirect_response(google_authorization_url($state));
+        return;
+    }
+
+    if ($path === '/api/auth/google/callback') {
+        try {
+            $user = authenticate_google_callback();
+            clear_google_state_cookie();
+            set_session_cookie($user);
+            redirect_response('/');
+        } catch (Throwable $error) {
+            redirect_auth_error($error->getMessage());
+        }
         return;
     }
 

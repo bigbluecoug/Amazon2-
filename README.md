@@ -60,7 +60,7 @@ openssl rand -hex 32
 
 ## Private Login Setup
 
-The app is protected by email/password login while the production identity provider is being decided. It now fails closed by default: if `AUTH_EMAIL` and `AUTH_PASSWORD` are not configured, nobody can sign in.
+The app supports private email/password login and Google OAuth login. It fails closed by default: if no login method is configured, nobody can sign in.
 
 For a private live workspace, set credentials before starting the server:
 
@@ -75,6 +75,26 @@ ruby server.rb
 The server verifies those credentials before setting a signed, HttpOnly session cookie. The order-processing API rejects unauthenticated requests.
 
 Demo login is disabled unless `ALLOW_DEMO_LOGIN=true` is explicitly set. Do not enable demo login for a shared or live site.
+
+## Google Login Setup
+
+For Forge or any live site, create a Google OAuth Web application client and add this authorized redirect URI:
+
+```text
+https://your-domain.com/api/auth/google/callback
+```
+
+Then set these environment variables on the server:
+
+```bash
+GOOGLE_CLIENT_ID="your-google-client-id"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+GOOGLE_REDIRECT_URI="https://your-domain.com/api/auth/google/callback"
+GOOGLE_ALLOWED_EMAILS="you@gmail.com"
+SESSION_SECRET="use-a-long-random-secret"
+```
+
+`GOOGLE_ALLOWED_EMAILS` is required unless you set `GOOGLE_ALLOWED_DOMAINS`. Keep it to the exact Google accounts that should access the workspace. After changing Forge environment variables, restart/reload the site so PHP sees the new values.
 
 ## Amazon Automation Boundary
 

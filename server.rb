@@ -1,9 +1,11 @@
 require "base64"
 require "date"
 require "json"
+require "net/http"
 require "openssl"
 require "securerandom"
 require "time"
+require "uri"
 require "webrick"
 
 ROOT = File.expand_path(__dir__)
@@ -43,6 +45,16 @@ USING_DEFAULT_CREDENTIALS = DEMO_LOGIN_ENABLED && (ENV["AUTH_EMAIL"].nil? || ENV
 SESSION_SECRET = ENV.fetch("SESSION_SECRET", "development-only-change-me")
 SESSION_COOKIE = "giftflow_session"
 SESSION_MAX_AGE = 60 * 60 * 24 * 7
+GOOGLE_STATE_COOKIE = "giftflow_google_state"
+GOOGLE_STATE_MAX_AGE = 600
+GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo"
+GOOGLE_CLIENT_ID = ENV.fetch("GOOGLE_CLIENT_ID", "").strip
+GOOGLE_CLIENT_SECRET = ENV.fetch("GOOGLE_CLIENT_SECRET", "").strip
+GOOGLE_REDIRECT_URI = ENV.fetch("GOOGLE_REDIRECT_URI", "").strip
+GOOGLE_ALLOWED_EMAILS = ENV.fetch("GOOGLE_ALLOWED_EMAILS", AUTH_EMAIL).split(",").map { |email| email.strip.downcase }.reject(&:empty?)
+GOOGLE_ALLOWED_DOMAINS = ENV.fetch("GOOGLE_ALLOWED_DOMAINS", "").split(",").map { |domain| domain.strip.downcase.delete_prefix("@") }.reject(&:empty?)
 
 MIME_TYPES = WEBrick::HTTPUtils::DefaultMimeTypes.merge(
   "js" => "application/javascript",
@@ -225,8 +237,150 @@ rescue JSON::ParserError, ArgumentError, KeyError
   nil
 end
 
+def password_login_configured?
+  present?(AUTH_EMAIL) && present?(AUTH_PASSWORD)
+end
+
+def google_login_configured?
+  present?(GOOGLE_CLIENT_ID) &&
+    present?(GOOGLE_CLIENT_SECRET) &&
+    (GOOGLE_ALLOWED_EMAILS.any? || GOOGLE_ALLOWED_DOMAINS.any?)
+end
+
+def request_origin(request)
+  proto = request["x-forwarded-proto"].to_s.split(",").first.to_s.strip
+  proto = request.ssl? ? "https" : "http" if proto.empty?
+  host = request["x-forwarded-host"].to_s.strip
+  host = request["host"].to_s.strip if host.empty?
+  host = "127.0.0.1:#{PORT}" if host.empty?
+  "#{proto}://#{host}"
+end
+
+def google_redirect_uri(request)
+  GOOGLE_REDIRECT_URI.empty? ? "#{request_origin(request)}/api/auth/google/callback" : GOOGLE_REDIRECT_URI
+end
+
+def google_authorization_url(state, request)
+  uri = URI(GOOGLE_AUTH_ENDPOINT)
+  uri.query = URI.encode_www_form(
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: google_redirect_uri(request),
+    response_type: "code",
+    scope: "openid profile email",
+    state: state,
+    prompt: "select_account"
+  )
+  uri.to_s
+end
+
+def google_state_cookie(state)
+  "#{GOOGLE_STATE_COOKIE}=#{state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=#{GOOGLE_STATE_MAX_AGE}"
+end
+
+def clear_google_state_cookie
+  "#{GOOGLE_STATE_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+end
+
+def redirect_response(response, location)
+  response.status = 302
+  response["Location"] = location
+end
+
+def redirect_auth_error(response, message)
+  response["Set-Cookie"] = clear_google_state_cookie
+  redirect_response(response, "/?authError=#{URI.encode_www_form_component(message)}")
+end
+
+def http_json_request(method, url, headers = {}, body = nil)
+  uri = URI(url)
+  request = method == "POST" ? Net::HTTP::Post.new(uri) : Net::HTTP::Get.new(uri)
+  headers.each { |key, value| request[key] = value }
+  request.body = body if body
+
+  response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https", open_timeout: 12, read_timeout: 12) do |http|
+    http.request(request)
+  end
+
+  payload = JSON.parse(response.body.to_s)
+  unless response.is_a?(Net::HTTPSuccess)
+    raise(payload["error_description"] || payload["error"] || "Google sign-in failed.")
+  end
+  payload
+rescue JSON::ParserError
+  raise "Google returned an unreadable response."
+rescue Errno::ECONNREFUSED, SocketError, Net::OpenTimeout, Net::ReadTimeout
+  raise "Google sign-in could not reach Google. Check outbound HTTPS from the server."
+end
+
+def exchange_google_code(code, request)
+  http_json_request(
+    "POST",
+    GOOGLE_TOKEN_ENDPOINT,
+    { "Content-Type" => "application/x-www-form-urlencoded" },
+    URI.encode_www_form(
+      code: code,
+      client_id: GOOGLE_CLIENT_ID,
+      client_secret: GOOGLE_CLIENT_SECRET,
+      redirect_uri: google_redirect_uri(request),
+      grant_type: "authorization_code"
+    )
+  )
+end
+
+def fetch_google_profile(access_token)
+  http_json_request(
+    "GET",
+    GOOGLE_USERINFO_ENDPOINT,
+    { "Authorization" => "Bearer #{access_token}" }
+  )
+end
+
+def google_profile_allowed?(email, hosted_domain)
+  GOOGLE_ALLOWED_EMAILS.include?(email) ||
+    (!hosted_domain.empty? && GOOGLE_ALLOWED_DOMAINS.include?(hosted_domain))
+end
+
+def google_user_from_profile(profile)
+  email = profile.fetch("email", "").to_s.strip.downcase
+  hosted_domain = profile.fetch("hd", "").to_s.strip.downcase
+  verified = [true, "true", 1, "1"].include?(profile["email_verified"]) ||
+    [true, "true", 1, "1"].include?(profile["verified_email"])
+
+  raise "Google did not return a verified email address." if email.empty? || !verified
+  raise "That Google account is not authorized for this workspace." unless google_profile_allowed?(email, hosted_domain)
+
+  sub = profile.fetch("sub", "").to_s.strip
+  {
+    "sub" => "google:#{sub.empty? ? email : sub}",
+    "email" => email,
+    "name" => profile.fetch("name", "").to_s.strip.empty? ? email.split("@").first : profile.fetch("name", "").to_s.strip,
+    "picture" => profile.fetch("picture", "").to_s.strip,
+    "hostedDomain" => hosted_domain,
+    "onboarded" => true,
+    "signedInAt" => Time.now.utc.iso8601
+  }
+end
+
+def authenticate_google_callback(request)
+  raise "Google login is not configured for this workspace." unless google_login_configured?
+
+  expected_state = request_cookies(request)[GOOGLE_STATE_COOKIE].to_s
+  actual_state = request.query["state"].to_s
+  raise "Google sign-in expired. Try again." if expected_state.empty? || actual_state.empty? || !secure_compare(expected_state, actual_state)
+  raise "Google sign-in was canceled or denied." if present?(request.query["error"])
+
+  code = request.query["code"].to_s.strip
+  raise "Google did not return a sign-in code." if code.empty?
+
+  token = exchange_google_code(code, request)
+  access_token = token.fetch("access_token", "").to_s.strip
+  raise "Google did not return an access token." if access_token.empty?
+
+  google_user_from_profile(fetch_google_profile(access_token))
+end
+
 def authenticate_user(email, password)
-  raise "Authentication is not configured. Set AUTH_EMAIL and AUTH_PASSWORD before starting the server." unless present?(AUTH_EMAIL) && present?(AUTH_PASSWORD)
+  raise "Authentication is not configured. Set AUTH_EMAIL and AUTH_PASSWORD before starting the server." unless password_login_configured?
 
   normalized_email = email.to_s.strip.downcase
   password_value = password.to_s
@@ -418,10 +572,14 @@ end
 
 server.mount_proc("/api/auth/config") do |request, response|
   user = current_user(request)
+  password_login_configured = password_login_configured?
+  google_login_configured = google_login_configured?
   json_response(response, {
     ok: true,
-    configured: present?(AUTH_EMAIL) && present?(AUTH_PASSWORD),
-    authMode: "password",
+    configured: password_login_configured || google_login_configured,
+    authMode: google_login_configured ? "google" : "password",
+    passwordLoginEnabled: password_login_configured,
+    googleLoginEnabled: google_login_configured,
     demoLoginEnabled: DEMO_LOGIN_ENABLED,
     usingDefaultCredentials: USING_DEFAULT_CREDENTIALS,
     user: user,
@@ -429,6 +587,27 @@ server.mount_proc("/api/auth/config") do |request, response|
       giftIdeaAdmin: gift_idea_admin?(user)
     }
   })
+end
+
+server.mount_proc("/api/auth/google/start") do |request, response|
+  unless google_login_configured?
+    redirect_auth_error(response, "Google login is not configured yet.")
+    next
+  end
+
+  state = base64url_encode(SecureRandom.random_bytes(32))
+  response["Set-Cookie"] = google_state_cookie(state)
+  redirect_response(response, google_authorization_url(state, request))
+end
+
+server.mount_proc("/api/auth/google/callback") do |request, response|
+  begin
+    user = authenticate_google_callback(request)
+    response["Set-Cookie"] = [clear_google_state_cookie, session_cookie(user)]
+    redirect_response(response, "/")
+  rescue StandardError => error
+    redirect_auth_error(response, error.message)
+  end
 end
 
 server.mount_proc("/api/auth/session") do |request, response|

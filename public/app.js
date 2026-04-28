@@ -142,6 +142,7 @@ let authConfig = null;
 let currentUser = null;
 
 async function initAuth() {
+  const authMessage = consumeAuthMessage();
   try {
     const response = await fetch("/api/auth/config", { credentials: "same-origin" });
     authConfig = await response.json();
@@ -149,12 +150,30 @@ async function initAuth() {
 
     if (currentUser) {
       routeAuthenticatedUser();
+    } else if (authMessage) {
+      showSignIn(authMessage);
     } else {
       showLanding();
     }
   } catch (_error) {
-    showLanding();
+    authConfig = { configured: false, passwordLoginEnabled: false, googleLoginEnabled: false, demoLoginEnabled: false };
+    if (authMessage) {
+      showSignIn(authMessage);
+    } else {
+      showLanding();
+    }
   }
+}
+
+function consumeAuthMessage() {
+  const params = new URLSearchParams(window.location.search);
+  const message = params.get("authError") || "";
+  if (message) {
+    params.delete("authError");
+    const query = params.toString();
+    history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+  }
+  return message;
 }
 
 function showLanding() {
@@ -175,15 +194,33 @@ function showSignIn(message = "") {
   byId("authGate").hidden = false;
   byId("signInPanel").hidden = false;
   byId("onboardingPanel").hidden = true;
+  const passwordLoginEnabled = Boolean(authConfig?.passwordLoginEnabled);
+  byId("googleLoginButton").hidden = !authConfig?.googleLoginEnabled;
+  byId("passwordLoginFields").hidden = !passwordLoginEnabled;
+  byId("passwordSignInButton").hidden = !passwordLoginEnabled;
   byId("demoLoginButton").hidden = !authConfig?.demoLoginEnabled;
+  byId("authEmail").required = passwordLoginEnabled;
+  byId("authPassword").required = passwordLoginEnabled;
 
   byId("authStatus").textContent = message || authReadyMessage();
-  byId("authEmail").focus();
+  if (passwordLoginEnabled) {
+    byId("authEmail").focus();
+  } else if (authConfig?.googleLoginEnabled) {
+    byId("googleLoginButton").focus();
+  }
 }
 
 function authReadyMessage() {
   if (!authConfig?.configured) {
-    return "Login is not configured yet. Set AUTH_EMAIL and AUTH_PASSWORD, then restart the server.";
+    return "Login is not configured yet. Set Google OAuth or workspace password credentials, then restart the server.";
+  }
+
+  if (authConfig.googleLoginEnabled && !authConfig.passwordLoginEnabled) {
+    return "Continue with Google to open your private workspace.";
+  }
+
+  if (authConfig.googleLoginEnabled) {
+    return "Continue with Google or use your workspace email and password.";
   }
 
   if (authConfig.demoLoginEnabled) {
@@ -246,10 +283,20 @@ async function requestSignIn(email, password, statusMessage = "Checking credenti
 
 async function submitSignIn(event) {
   event.preventDefault();
+  if (!authConfig?.passwordLoginEnabled) return;
   const user = await requestSignIn(fieldValue("authEmail"), fieldValue("authPassword"));
   if (!user) return;
 
   routeAuthenticatedUser();
+}
+
+function openGoogleWorkspace() {
+  if (!authConfig?.googleLoginEnabled) {
+    showSignIn("Google login is not configured for this workspace.");
+    return;
+  }
+
+  window.location.href = "/api/auth/google/start";
 }
 
 async function openDemoWorkspace() {
@@ -1124,6 +1171,7 @@ function wireButtons() {
   byId("getStartedButton").addEventListener("click", () => {
     showSignIn();
   });
+  byId("googleLoginButton").addEventListener("click", openGoogleWorkspace);
   byId("demoLoginButton").addEventListener("click", openDemoWorkspace);
   byId("backToIntroButton").addEventListener("click", showLanding);
   byId("saveButton").addEventListener("click", saveState);

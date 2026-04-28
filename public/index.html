@@ -100,7 +100,7 @@
         <p class="launch-note">Secure workspace</p>
         <h1>Sign in before gifting.</h1>
         <p class="lede">GiftFlow keeps prospect lists, gift messages, and Amazon automation controls behind a protected workspace login.</p>
-        <div class="form-grid two-col auth-fields">
+        <div class="form-grid two-col auth-fields" id="passwordLoginFields">
           <label>
             <span>Email address</span>
             <input id="authEmail" type="email" autocomplete="email" required>
@@ -111,7 +111,8 @@
           </label>
         </div>
         <div class="auth-actions">
-          <button class="button button-dark" type="submit">Sign in</button>
+          <button class="button button-dark" id="googleLoginButton" type="button" hidden>Continue with Google</button>
+          <button class="button button-dark" id="passwordSignInButton" type="submit">Sign in</button>
           <button class="button button-light" id="demoLoginButton" type="button" hidden>Open demo workspace</button>
           <button class="button button-light" id="backToIntroButton" type="button">Back to intro</button>
         </div>
@@ -120,6 +121,7 @@
           <summary>Temporary login setup</summary>
           <ol>
             <li>Start this app with <code>AUTH_EMAIL</code>, <code>AUTH_PASSWORD</code>, and a long random <code>SESSION_SECRET</code>.</li>
+            <li>For Google login, set <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>, and <code>GOOGLE_ALLOWED_EMAILS</code>.</li>
             <li>Share those credentials only with teammates who should access campaign and prospect data.</li>
             <li>Replace this temporary login with your production identity provider before going live.</li>
           </ol>
