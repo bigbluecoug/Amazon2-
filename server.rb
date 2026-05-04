@@ -569,7 +569,7 @@ def amazon_oauth_result_page(request, response, payload)
             setTimeout(() => window.close(), 900);
           } else {
             localStorage.setItem("giftflow-amazon-oauth-result", JSON.stringify(payload));
-            setTimeout(() => { window.location.href = "/#automation"; }, 900);
+            setTimeout(() => { window.location.href = "/automation.html"; }, 900);
           }
         </script>
       </body>
@@ -986,6 +986,52 @@ server.mount_proc("/api/amazon/oauth/callback") do |request, response|
       ok: false,
       error: error.message
     })
+  end
+end
+
+server.mount_proc("/api/amazon/oauth/exchange") do |request, response|
+  user = require_user(request, response)
+  next unless user
+
+  begin
+    unless amazon_oauth_configured?
+      json_response(response, {
+        type: "giftflow-amazon-oauth",
+        ok: false,
+        errors: ["Amazon Business OAuth is not configured. Add the Amazon Business application ID, client ID, and client secret on the server."]
+      }, 422)
+      next
+    end
+
+    payload = JSON.parse(request.body.to_s)
+    code = payload.fetch("code", "").to_s.strip
+    if code.empty?
+      json_response(response, {
+        type: "giftflow-amazon-oauth",
+        ok: false,
+        errors: ["Paste the OAuth code from the Amazon redirect URL."]
+      }, 400)
+      next
+    end
+
+    token = exchange_amazon_oauth_code(code, request)
+    refresh_token = token.fetch("refresh_token", "").to_s.strip
+    raise "Amazon did not return a refresh token." if refresh_token.empty?
+
+    json_response(response, {
+      type: "giftflow-amazon-oauth",
+      ok: true,
+      refreshToken: refresh_token,
+      accessToken: token.fetch("access_token", "").to_s.strip,
+      expiresIn: token.fetch("expires_in", 3600).to_i,
+      clientId: AMAZON_BUSINESS_CLIENT_ID,
+      marketplace: AMAZON_BUSINESS_MARKETPLACE_ID,
+      endpoint: AMAZON_BUSINESS_API_ENDPOINT
+    })
+  rescue JSON::ParserError
+    json_response(response, { type: "giftflow-amazon-oauth", ok: false, errors: ["Request body must be valid JSON."] }, 400)
+  rescue StandardError => error
+    json_response(response, { type: "giftflow-amazon-oauth", ok: false, errors: [error.message] }, 422)
   end
 end
 

@@ -1571,6 +1571,129 @@ textarea:focus {
   background: rgba(255, 107, 87, 0.13);
 }
 
+.automation-page {
+  padding-bottom: clamp(48px, 8vw, 96px);
+}
+
+.automation-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+  gap: clamp(28px, 5vw, 72px);
+  align-items: end;
+  padding: clamp(48px, 8vw, 96px) clamp(18px, 5vw, 72px) clamp(32px, 5vw, 60px);
+  border-bottom: 1px solid rgba(13, 13, 13, 0.1);
+  background: #fff;
+}
+
+.automation-hero h1 {
+  max-width: 980px;
+  font-size: clamp(48px, 7vw, 96px);
+}
+
+.automation-status-strip {
+  display: grid;
+  gap: 10px;
+}
+
+.automation-status-strip span {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(13, 13, 13, 0.12);
+  border-radius: 8px;
+  background: #fbfaf6;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.automation-console-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+  gap: 18px;
+  width: min(1280px, calc(100% - 36px));
+  margin: 28px auto;
+}
+
+.automation-settings {
+  margin-top: 22px;
+}
+
+.copy-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.manual-code-box {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.manual-code-box p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.manual-code-box code {
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.automation-giftflow-panel {
+  align-self: start;
+}
+
+.automation-metrics {
+  display: grid;
+  gap: 12px;
+  margin: 22px 0;
+}
+
+.automation-metrics div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid rgba(13, 13, 13, 0.1);
+  border-radius: 8px;
+  background: #fbfaf6;
+}
+
+.automation-metrics span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.automation-metrics strong {
+  font-size: 28px;
+}
+
+.automation-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.automation-note {
+  margin: 18px 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.automation-doc-steps {
+  width: min(1280px, calc(100% - 36px));
+  margin: 0 auto;
+}
+
+.automation-doc-links {
+  padding: 24px 0 0;
+}
+
 .history-heading {
   display: flex;
   align-items: center;
@@ -1697,6 +1820,11 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 
+  .automation-hero,
+  .automation-console-grid {
+    grid-template-columns: 1fr;
+  }
+
   .credential-guide-content {
     grid-template-columns: 1fr;
   }
@@ -1774,6 +1902,10 @@ textarea:focus {
   }
 
   .amazon-url-row {
+    grid-template-columns: 1fr;
+  }
+
+  .copy-row {
     grid-template-columns: 1fr;
   }
 

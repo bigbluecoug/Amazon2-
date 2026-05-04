@@ -109,7 +109,13 @@ Add this exact redirect URI to the Amazon Business Solution Provider Portal app 
 https://amazon2-momyzfei.on-forge.com/api/amazon/oauth/callback
 ```
 
-Then sign in to GiftFlow, open Automation, and choose **Connect Amazon Business**. The backend exchanges Amazon's OAuth code at the Login With Amazon token endpoint and fills the returned refresh token into the workspace.
+Then sign in to GiftFlow and open the dedicated automation console:
+
+```text
+https://amazon2-momyzfei.on-forge.com/automation.html
+```
+
+Choose **Connect Amazon Business**. The backend exchanges Amazon's OAuth code at the Login With Amazon token endpoint and fills the returned refresh token into the workspace. If Amazon shows you a callback URL instead of returning cleanly, copy the value after `code=` and paste it into the manual exchange box on `/automation.html` before the code expires.
 
 To complete live ordering, connect the processing endpoint to the approved Amazon Business buying workflow for your account, then map each generated `amazonPayload` to that API's order creation request. Keeping this boundary explicit prevents accidental gift sends while campaign setup is still being tested.
 

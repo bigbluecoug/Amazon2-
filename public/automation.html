@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Automation Console | GiftFlow Studio</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="GiftFlow Studio home">
+        <span class="brand-mark">GF</span>
+        <span>GiftFlow</span>
+      </a>
+      <nav class="nav" aria-label="Automation navigation">
+        <a href="/#campaign">Campaign</a>
+        <a href="/#sequence">Gifts</a>
+        <a href="/ideas.html">Ideas</a>
+        <a href="/#prospects">Prospects</a>
+      </nav>
+      <a class="button button-dark" href="/">Back to GiftFlow</a>
+    </header>
+
+    <main class="automation-page">
+      <section class="automation-hero">
+        <div>
+          <p class="eyebrow"><span class="panel-step-badge">05</span> Amazon Business automation</p>
+          <h1>Connect Amazon without digging through the campaign builder.</h1>
+          <p class="lede">This console is connected to your GiftFlow workspace and focuses only on Amazon Business setup, refresh-token capture, and queue readiness.</p>
+        </div>
+        <div class="automation-status-strip" aria-label="Automation setup status">
+          <span id="authStateBadge">Checking sign-in</span>
+          <span id="setupStateBadge">Checking setup</span>
+          <span id="tokenStateBadge">No token saved</span>
+        </div>
+      </section>
+
+      <section class="automation-console-grid">
+        <section class="panel automation-connect-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Refresh token</p>
+              <h2>Authorize the Amazon Business app.</h2>
+            </div>
+            <button class="button button-dark" id="connectAmazonButton" type="button">Connect Amazon Business</button>
+          </div>
+
+          <div class="automation-result is-visible" id="automationStatus" role="status" aria-live="polite">
+            <strong>Checking setup</strong>
+            <p>GiftFlow is checking the Amazon Business OAuth settings on the server.</p>
+          </div>
+
+          <div class="form-grid two-col compact automation-settings">
+            <label class="full-span">
+              <span>Callback URL for Amazon SPP</span>
+              <div class="copy-row">
+                <input id="amazonRedirectUri" type="url" readonly>
+                <button class="button button-light" id="copyRedirectButton" type="button">Copy</button>
+              </div>
+            </label>
+            <label>
+              <span>Marketplace ID</span>
+              <input id="amazonMarketplace" type="text" placeholder="ATVPDKIKX0DER">
+            </label>
+            <label>
+              <span>Client ID</span>
+              <input id="amazonClientId" type="password" autocomplete="off">
+            </label>
+            <label class="full-span">
+              <span>Refresh token</span>
+              <input id="amazonRefreshToken" type="password" autocomplete="off" placeholder="Connect Amazon Business to fill this">
+            </label>
+            <label class="full-span">
+              <span>API endpoint</span>
+              <input id="amazonEndpoint" type="url" placeholder="https://api.business.amazon.com">
+            </label>
+          </div>
+
+          <details class="credential-guide" open>
+            <summary>Manual fallback if Amazon shows you a code</summary>
+            <div class="manual-code-box">
+              <p>Amazon's code is valid for about five minutes. Paste only the value after <code>code=</code>, or paste the full redirect URL and GiftFlow will extract the code.</p>
+              <label>
+                <span>OAuth code or redirect URL</span>
+                <textarea id="manualAmazonCode" rows="4" placeholder="https://amazon2-momyzfei.on-forge.com/api/amazon/oauth/callback?state=...&code=..."></textarea>
+              </label>
+              <button class="button button-dark" id="exchangeCodeButton" type="button">Exchange pasted code</button>
+            </div>
+          </details>
+        </section>
+
+        <aside class="panel automation-giftflow-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Connected GiftFlow data</p>
+              <h2 id="campaignName">GiftFlow campaign</h2>
+            </div>
+          </div>
+          <div class="automation-metrics">
+            <div>
+              <span>Ready prospects</span>
+              <strong id="readyProspects">0</strong>
+            </div>
+            <div>
+              <span>Due gifts</span>
+              <strong id="dueGifts">0</strong>
+            </div>
+            <div>
+              <span>Queued orders</span>
+              <strong id="queuedOrders">0</strong>
+            </div>
+          </div>
+          <div class="automation-actions">
+            <a class="button button-light" href="/#sequence">Edit gift sequence</a>
+            <a class="button button-light" href="/#prospects">Edit prospects</a>
+            <button class="button button-dark" id="markApiReadyButton" type="button">Use API-ready mode</button>
+          </div>
+          <p class="automation-note" id="giftflowConnectionNote">Changes here save to the same browser workspace used by GiftFlow.</p>
+        </aside>
+      </section>
+
+      <section class="section automation-doc-steps">
+        <div>
+          <p class="eyebrow">Amazon checklist</p>
+          <h2>What must match before Amazon will return a token.</h2>
+        </div>
+        <div class="intro-step-grid">
+          <article>
+            <span>01</span>
+            <strong>SPP values on Forge</strong>
+            <p>Add Application ID, LWA Client ID, and LWA Client Secret to the Forge environment.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <strong>Exact callback URL</strong>
+            <p>The callback URL in SPP must match the URL shown in this console, character for character.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <strong>Amazon Business admin</strong>
+            <p>Authorize with an admin account for all legal entities under the Amazon Business account.</p>
+          </article>
+          <article>
+            <span>04</span>
+            <strong>Five-minute code</strong>
+            <p>If you copy a code manually, exchange it immediately before it expires.</p>
+          </article>
+        </div>
+        <div class="credential-links automation-doc-links">
+          <a href="https://developer-docs.amazon.com/amazon-business/docs/generate-refresh-token" target="_blank" rel="noreferrer">Amazon refresh token docs</a>
+          <a href="https://developer-docs.amazon.com/amazon-business/docs/amazon-business-api-roles" target="_blank" rel="noreferrer">Amazon Business roles</a>
+          <a href="https://developer-docs.amazon.com/amazon-business/docs/placing-an-order" target="_blank" rel="noreferrer">Order placement docs</a>
+        </div>
+      </section>
+    </main>
+
+    <script src="/automation.js"></script>
+  </body>
+</html>

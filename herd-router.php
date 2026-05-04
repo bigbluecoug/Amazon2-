@@ -816,7 +816,7 @@ function amazon_oauth_result_page(array $payload): void
     echo '<title>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</title>';
     echo '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:Inter,Arial,sans-serif;background:#fbfaf6;color:#171717}main{width:min(560px,calc(100% - 40px));padding:32px;border:1px solid #ded8cc;background:#fff;border-radius:8px;box-shadow:0 18px 48px rgba(0,0,0,.12)}h1{margin:0 0 12px;font-size:32px}p{margin:0;color:#5f5a52;line-height:1.5}</style>';
     echo '</head><body><main><h1>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</h1><p>' . htmlspecialchars($message, ENT_QUOTES, 'UTF-8') . '</p></main>';
-    echo '<script>const payload=' . $json . ';const targetOrigin=' . $origin . ';if(window.opener){window.opener.postMessage(payload,targetOrigin);setTimeout(()=>window.close(),900);}else{localStorage.setItem("giftflow-amazon-oauth-result",JSON.stringify(payload));setTimeout(()=>{window.location.href="/#automation";},900);}</script>';
+    echo '<script>const payload=' . $json . ';const targetOrigin=' . $origin . ';if(window.opener){window.opener.postMessage(payload,targetOrigin);setTimeout(()=>window.close(),900);}else{localStorage.setItem("giftflow-amazon-oauth-result",JSON.stringify(payload));setTimeout(()=>{window.location.href="/automation.html";},900);}</script>';
     echo '</body></html>';
 }
 
@@ -1403,6 +1403,56 @@ function handle_request(): void
                 'ok' => false,
                 'error' => $error->getMessage(),
             ]);
+        }
+        return;
+    }
+
+    if ($path === '/api/amazon/oauth/exchange') {
+        if (require_user() === null) {
+            return;
+        }
+
+        try {
+            if (!amazon_oauth_configured()) {
+                json_response([
+                    'type' => 'giftflow-amazon-oauth',
+                    'ok' => false,
+                    'errors' => ['Amazon Business OAuth is not configured. Add the Amazon Business application ID, client ID, and client secret on Forge.'],
+                ], 422);
+                return;
+            }
+
+            $payload = read_json_body();
+            $code = trim((string) ($payload['code'] ?? ''));
+            if ($code === '') {
+                json_response([
+                    'type' => 'giftflow-amazon-oauth',
+                    'ok' => false,
+                    'errors' => ['Paste the OAuth code from the Amazon redirect URL.'],
+                ], 400);
+                return;
+            }
+
+            $token = exchange_amazon_oauth_code($code);
+            $refreshToken = trim((string) ($token['refresh_token'] ?? ''));
+            if ($refreshToken === '') {
+                throw new RuntimeException('Amazon did not return a refresh token.');
+            }
+
+            json_response([
+                'type' => 'giftflow-amazon-oauth',
+                'ok' => true,
+                'refreshToken' => $refreshToken,
+                'accessToken' => trim((string) ($token['access_token'] ?? '')),
+                'expiresIn' => (int) ($token['expires_in'] ?? 3600),
+                'clientId' => amazon_client_id(),
+                'marketplace' => amazon_marketplace_id(),
+                'endpoint' => amazon_api_endpoint(),
+            ]);
+        } catch (InvalidArgumentException $error) {
+            json_response(['type' => 'giftflow-amazon-oauth', 'ok' => false, 'errors' => [$error->getMessage()]], 400);
+        } catch (Throwable $error) {
+            json_response(['type' => 'giftflow-amazon-oauth', 'ok' => false, 'errors' => [$error->getMessage()]], 422);
         }
         return;
     }
