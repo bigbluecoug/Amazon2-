@@ -1,6 +1,6 @@
 # GiftFlow Studio
 
-A local prototype for automating Amazon gift campaigns for prospect outreach.
+A Laravel app for automating Amazon gift campaigns for prospect outreach.
 
 ## What It Does
 
@@ -16,7 +16,8 @@ A local prototype for automating Amazon gift campaigns for prospect outreach.
 ## Run It
 
 ```bash
-ruby server.rb
+composer install
+php artisan serve --host=127.0.0.1 --port=4174
 ```
 
 Then open:
@@ -25,11 +26,11 @@ Then open:
 http://127.0.0.1:4174
 ```
 
-Set a custom port with `PORT=4180 ruby server.rb` if needed.
+The older Ruby development server is still available as a fallback with `ruby server.rb`, but Laravel is now the primary runtime.
 
 ## Run It With Laravel Herd
 
-Herd serves PHP apps through local `.test` domains. This repo includes a small PHP front controller (`index.php`, `public/index.php`, and `herd-router.php`) that mirrors the Ruby API, so you can run the same UI and automation queue through Herd without starting `server.rb`.
+Herd serves PHP apps through local `.test` domains. This repo is now a Laravel app, with the existing GiftFlow API routed through Laravel while the remaining legacy endpoints are migrated into native controllers.
 
 From the project root, link the site with a clean local name:
 
@@ -60,15 +61,19 @@ openssl rand -hex 32
 
 ## Deploy It On Forge
 
-GiftFlow is a plain PHP app, not a Laravel app. If Forge creates the site with Laravel defaults, remove unguarded `php artisan ...` lines from the deployment script. A safe deploy script is:
+GiftFlow is a Laravel app. Set the site web directory to `/public` and keep the normal Forge Laravel deployment flow. A safe zero-downtime deploy script is:
 
 ```bash
-cd /home/forge/amazon2-vxatoi5g.on-forge.com
-git pull origin main
-composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+$CREATE_RELEASE()
+cd $FORGE_RELEASE_DIRECTORY
+$FORGE_COMPOSER install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+$FORGE_PHP artisan migrate --force
+$FORGE_PHP artisan config:cache
+$FORGE_PHP artisan route:cache
+$ACTIVATE_RELEASE()
 ```
 
-Set the site web directory to `/public` if Forge asks for one. The repository also includes a small `artisan` compatibility helper so default Forge scripts that still call common Laravel commands can skip them cleanly.
+Forge should use PHP 8.3 or newer for Laravel 13. Set `APP_KEY` in Forge's environment; if it is missing, generate one locally with `php artisan key:generate --show` and paste the printed value into Forge.
 
 ## Account Login Setup
 
@@ -78,8 +83,7 @@ For a live workspace, set a long session secret before starting the server:
 
 ```bash
 SESSION_SECRET="use-a-long-random-secret" \
-ALLOW_ACCOUNT_REGISTRATION=true \
-ruby server.rb
+ALLOW_ACCOUNT_REGISTRATION=true
 ```
 
 After you create the accounts you want, set this on Forge if you want to stop public sign-ups:
@@ -93,8 +97,7 @@ You can still keep a private fallback login by setting these values:
 ```bash
 AUTH_EMAIL="you@company.com" \
 AUTH_PASSWORD="use-a-strong-password" \
-AUTH_NAME="Your Name" \
-ruby server.rb
+AUTH_NAME="Your Name"
 ```
 
 The server verifies credentials before setting a signed, HttpOnly session cookie. The order-processing API rejects unauthenticated requests. Demo login is disabled unless `ALLOW_DEMO_LOGIN=true` is explicitly set. Do not enable demo login for a shared or live site.

@@ -1,2 +1,3 @@
 <?php
-require __DIR__ . '/herd-router.php';
+
+require __DIR__.'/public/index.php';

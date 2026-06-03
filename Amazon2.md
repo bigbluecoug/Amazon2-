@@ -1,6 +1,6 @@
 # GiftFlow Studio
 
-A local prototype for automating Amazon gift campaigns for prospect outreach.
+A Laravel app for automating Amazon gift campaigns for prospect outreach.
 
 ## What It Does
 
@@ -16,7 +16,8 @@ A local prototype for automating Amazon gift campaigns for prospect outreach.
 ## Run It
 
 ```bash
-ruby server.rb
+composer install
+php artisan serve --host=127.0.0.1 --port=4174
 ```
 
 Then open:
@@ -25,11 +26,11 @@ Then open:
 http://127.0.0.1:4174
 ```
 
-Set a custom port with `PORT=4180 ruby server.rb` if needed.
+The older Ruby development server is still available as a fallback with `ruby server.rb`, but Laravel is now the primary runtime.
 
 ## Run It With Laravel Herd
 
-Herd serves PHP apps through local `.test` domains. This repo includes a small PHP front controller (`index.php`, `public/index.php`, and `herd-router.php`) that mirrors the Ruby API, so you can run the same UI and automation queue through Herd without starting `server.rb`.
+Herd serves PHP apps through local `.test` domains. This repo is now a Laravel app, with the existing GiftFlow API routed through Laravel while the remaining legacy endpoints are migrated into native controllers.
 
 From the project root, link the site with a clean local name:
 
@@ -58,28 +59,16 @@ Use a long random `SESSION_SECRET`; for example:
 openssl rand -hex 32
 ```
 
-## Temporary Login Setup
+## Account Login Setup
 
-The app is protected by a temporary email/password login while the production identity provider is being decided. For local testing, the default credentials are:
-
-```text
-Email: team@giftflow.local
-Password: giftflow-demo
-```
-
-When the app is running with those local defaults, the sign-in screen also shows an **Open demo workspace** button that signs in and opens the flow page directly.
-
-For anything shared with your team, set your own credentials before starting the server:
+GiftFlow supports registered accounts with hashed passwords. The first created account becomes an admin. For a live workspace, set a long session secret and decide whether account registration should stay open:
 
 ```bash
-AUTH_EMAIL="you@company.com" \
-AUTH_PASSWORD="use-a-strong-password" \
-AUTH_NAME="Your Name" \
-SESSION_SECRET="use-a-long-random-secret" \
-ruby server.rb
+SESSION_SECRET="use-a-long-random-secret"
+ALLOW_ACCOUNT_REGISTRATION=true
 ```
 
-The server verifies those credentials before setting a signed, HttpOnly session cookie. The order-processing API rejects unauthenticated requests.
+The server verifies account credentials before setting a signed, HttpOnly session cookie. The order-processing API rejects unauthenticated requests.
 
 ## Amazon Automation Boundary
 

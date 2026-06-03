@@ -10,6 +10,7 @@ require "webrick"
 
 ROOT = File.expand_path(__dir__)
 PUBLIC_ROOT = File.join(ROOT, "public")
+LEGACY_INDEX_FILE = File.join(ROOT, "resources", "legacy", "index.html")
 DATA_ROOT = File.join(ROOT, "data")
 GIFT_IDEAS_FILE = File.join(DATA_ROOT, "gift-ideas.json")
 USERS_FILE = File.join(DATA_ROOT, "users.json")
@@ -1333,10 +1334,9 @@ server.mount_proc("/api/orders/process") do |request, response|
 end
 
 server.mount_proc("/") do |request, response|
-  path = request.path == "/" ? "/index.html" : request.path
-  file_path = File.expand_path(File.join(PUBLIC_ROOT, path))
+  file_path = request.path == "/" ? LEGACY_INDEX_FILE : File.expand_path(File.join(PUBLIC_ROOT, request.path))
 
-  if file_path.start_with?(PUBLIC_ROOT) && File.file?(file_path)
+  if (file_path == LEGACY_INDEX_FILE || file_path.start_with?(PUBLIC_ROOT)) && File.file?(file_path)
     response.body = File.binread(file_path)
     response["Content-Type"] = WEBrick::HTTPUtils.mime_type(file_path, MIME_TYPES)
   else
