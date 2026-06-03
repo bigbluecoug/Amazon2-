@@ -5,10 +5,25 @@ const defaultAmazonEndpoint = "https://na.business-api.amazon.com";
 const today = new Date().toISOString().slice(0, 10);
 let state = loadState();
 let currentUser = null;
+let authConfig = null;
 let amazonConnectionConfig = null;
 
 function byId(id) {
   return document.getElementById(id);
+}
+
+function canManageAmazonConnection() {
+  return Boolean(authConfig?.permissions?.giftIdeaAdmin || currentUser?.role === "admin");
+}
+
+function applyAmazonAdminVisibility() {
+  const canManage = canManageAmazonConnection();
+  document.querySelectorAll(".admin-amazon-control").forEach((element) => {
+    element.hidden = !canManage;
+    if (!canManage && element.matches("details")) {
+      element.open = false;
+    }
+  });
 }
 
 function loadState() {
@@ -90,6 +105,27 @@ function updateSetupSteps() {
   const hasAmazonConnection = !!state.amazon?.refreshToken;
   const hasApiReadyMode = state.execution?.amazonMode === "amazon-business-api";
 
+  if (currentUser && !canManageAmazonConnection()) {
+    setStepState(
+      "serverSetupStep",
+      "waiting",
+      "A workspace admin manages the private Amazon app settings."
+    );
+    setStepState(
+      "amazonConnectionStep",
+      "waiting",
+      "No Amazon account connection is needed from regular team members."
+    );
+    setStepState(
+      "teamQueueStep",
+      hasApiReadyMode ? "ready" : "waiting",
+      hasApiReadyMode
+        ? "The team can use GiftFlow without handling API credentials."
+        : "Use GiftFlow normally; an admin can enable the live connector when ready."
+    );
+    return;
+  }
+
   if (amazonConnectionConfig) {
     const missing = amazonConnectionConfig?.missing || [];
     setStepState(
@@ -134,7 +170,9 @@ async function loadAuth() {
   try {
     const response = await fetch("/api/auth/config", { credentials: "same-origin" });
     const payload = await response.json();
+    authConfig = payload;
     currentUser = payload.user || null;
+    applyAmazonAdminVisibility();
     byId("authStateBadge").textContent = currentUser ? "Workspace signed in" : "Sign in required";
     if (!currentUser) {
       showStatus("Sign in required", "Sign in to GiftFlow before connecting Amazon Business.");
@@ -142,8 +180,15 @@ async function loadAuth() {
       byId("exchangeCodeButton").disabled = true;
       return false;
     }
+    if (!canManageAmazonConnection()) {
+      byId("setupStateBadge").textContent = "Admin-managed setup";
+      showStatus("Amazon setup is handled by an admin", "You can keep building campaigns and using the GiftFlow queue without connecting an Amazon account or touching API settings.", true);
+      updateSetupSteps();
+    }
     return true;
   } catch (_error) {
+    authConfig = null;
+    applyAmazonAdminVisibility();
     byId("authStateBadge").textContent = "Auth unavailable";
     showStatus("Could not check sign-in", "Open GiftFlow and sign in, then return to this automation console.");
     return false;
@@ -151,6 +196,8 @@ async function loadAuth() {
 }
 
 async function loadAmazonConnectionConfig() {
+  if (!canManageAmazonConnection()) return;
+
   try {
     const response = await fetch("/api/amazon/oauth/config", { credentials: "same-origin" });
     if (!response.ok) throw new Error("Amazon connection route unavailable");
@@ -167,6 +214,8 @@ async function loadAmazonConnectionConfig() {
 }
 
 function applyAmazonConnectionConfig() {
+  if (!canManageAmazonConnection()) return;
+
   const missing = amazonConnectionConfig?.missing || [];
   byId("connectAmazonButton").textContent = amazonConnectionConfig?.configured ? "Connect Amazon Business" : "Waiting on admin setup";
   byId("connectAmazonButton").disabled = !amazonConnectionConfig?.configured;
@@ -206,7 +255,7 @@ function renderGiftFlowState() {
   byId("queuedOrders").textContent = state.orderHistory.length;
   byId("giftflowConnectionNote").textContent = state.execution?.amazonMode === "amazon-business-api"
     ? "Amazon send queue is enabled for this browser workspace."
-    : "Connect Amazon once, then enable the send queue for the team.";
+    : "An admin can connect Amazon once; team members can keep working without API settings.";
 
   setValue("amazonMarketplace", state.amazon.marketplace);
   setValue("amazonClientId", state.amazon.clientId);
@@ -235,6 +284,11 @@ function syncAmazonFields() {
 }
 
 async function connectAmazonBusiness() {
+  if (!canManageAmazonConnection()) {
+    showStatus("Admin-only setup", "Only a workspace admin can connect Amazon Business. You can keep using the GiftFlow queue normally.");
+    return;
+  }
+
   const popup = window.open("", "giftflowAmazonOAuth", "width=760,height=780");
   if (popup) {
     popup.document.write("<!doctype html><title>Checking Amazon setup</title><p style=\"font-family:Arial,sans-serif;padding:24px\">Checking Amazon Business setup...</p>");
@@ -274,6 +328,11 @@ function extractAmazonCode(value) {
 }
 
 async function exchangeManualCode() {
+  if (!canManageAmazonConnection()) {
+    showStatus("Admin-only setup", "Only a workspace admin can finish the Amazon Business connection.");
+    return;
+  }
+
   const code = extractAmazonCode(fieldValue("manualAmazonCode"));
   if (!code) {
     showStatus("Missing Amazon code", "Paste the callback URL Amazon showed you, or paste only the temporary code.");
@@ -303,6 +362,7 @@ async function exchangeManualCode() {
 }
 
 function receiveAmazonOAuthMessage(event) {
+  if (!canManageAmazonConnection()) return;
   if (event.origin !== window.location.origin) return;
   const payload = event.data || {};
   if (payload.type !== "giftflow-amazon-oauth") return;
@@ -310,6 +370,7 @@ function receiveAmazonOAuthMessage(event) {
 }
 
 function consumeStoredAmazonOAuthResult() {
+  if (!canManageAmazonConnection()) return;
   const raw = localStorage.getItem(amazonOAuthResultKey);
   if (!raw) return;
 
@@ -322,6 +383,7 @@ function consumeStoredAmazonOAuthResult() {
 }
 
 function applyAmazonOAuthResult(payload) {
+  if (!canManageAmazonConnection()) return;
   if (!payload || payload.type !== "giftflow-amazon-oauth") return;
 
   if (!payload.ok) {
@@ -341,6 +403,8 @@ function applyAmazonOAuthResult(payload) {
 }
 
 async function copyRedirectUri() {
+  if (!canManageAmazonConnection()) return;
+
   const value = fieldValue("amazonRedirectUri");
   if (!value) return;
 
@@ -375,9 +439,9 @@ function wireEvents() {
 async function init() {
   renderGiftFlowState();
   wireEvents();
-  consumeStoredAmazonOAuthResult();
   const signedIn = await loadAuth();
-  if (signedIn) {
+  if (signedIn && canManageAmazonConnection()) {
+    consumeStoredAmazonOAuthResult();
     await loadAmazonConnectionConfig();
   }
 }

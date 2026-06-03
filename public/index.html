@@ -481,7 +481,7 @@
                   <option value="amazon-business-api">Connected Amazon queue</option>
                 </select>
               </label>
-              <div class="amazon-connect-row full-span">
+              <div class="amazon-connect-row full-span admin-amazon-control" hidden>
                 <button class="button button-dark" id="connectAmazonButton" type="button">Connect Amazon Business</button>
                 <p id="amazonConnectionStatus">An admin connects Amazon once. After that, team members can run the send queue without handling API settings.</p>
               </div>
@@ -491,7 +491,7 @@
               </label>
             </div>
 
-            <details class="credential-guide" id="amazonCredentialGuide">
+            <details class="credential-guide admin-amazon-control" id="amazonCredentialGuide" hidden>
               <summary>Advanced Amazon admin settings</summary>
               <div class="form-grid two-col compact automation-settings">
                 <label>
@@ -628,6 +628,6 @@
       </article>
     </template>
 
-    <script src="/app.js?v=20260603-ai-fill"></script>
+    <script src="/app.js?v=20260603-admin-amazon"></script>
   </body>
 </html>

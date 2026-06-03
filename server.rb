@@ -907,6 +907,15 @@ def require_gift_idea_admin(request, response)
   nil
 end
 
+def require_workspace_admin(request, response)
+  user = require_user(request, response)
+  return nil unless user
+  return user if gift_idea_admin?(user)
+
+  json_response(response, { ok: false, errors: ["You are not authorized to manage workspace admin settings."] }, 403)
+  nil
+end
+
 def ready_for_live_amazon?(state)
   amazon = state.fetch("amazon", {})
   %w[clientId refreshToken marketplace endpoint].all? { |key| present?(amazon[key]) }
@@ -1175,7 +1184,7 @@ server.mount_proc("/api/auth/logout") do |_request, response|
 end
 
 server.mount_proc("/api/amazon/oauth/config") do |request, response|
-  next unless require_user(request, response)
+  next unless require_workspace_admin(request, response)
 
   missing = amazon_oauth_missing_settings
   json_response(response, {
@@ -1204,7 +1213,7 @@ server.mount_proc("/api/amazon/enrich") do |request, response|
 end
 
 server.mount_proc("/api/amazon/oauth/start") do |request, response|
-  next unless require_user(request, response)
+  next unless require_workspace_admin(request, response)
 
   unless amazon_oauth_configured?
     amazon_oauth_result_page(request, response, {
@@ -1233,7 +1242,7 @@ server.mount_proc("/api/amazon/oauth/callback") do |request, response|
 end
 
 server.mount_proc("/api/amazon/oauth/exchange") do |request, response|
-  user = require_user(request, response)
+  user = require_workspace_admin(request, response)
   next unless user
 
   begin

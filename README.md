@@ -129,7 +129,7 @@ Then the Amazon Business admin signs in to GiftFlow and opens the dedicated auto
 https://amazon2-momyzfei.on-forge.com/automation.html
 ```
 
-Choose **Connect Amazon Business** and approve access. GiftFlow saves the private Amazon connection in the workspace so regular team members can use the send queue without seeing app IDs, tokens, endpoints, or OAuth codes. If Amazon shows a callback URL instead of returning cleanly, use the troubleshooting section on `/automation.html` to paste the full callback URL before the temporary code expires.
+Choose **Connect Amazon Business** and approve access. The connection controls and manual code exchange are admin-only in the UI, and the Amazon OAuth setup endpoints reject non-admin accounts. GiftFlow saves the private Amazon connection in the workspace so regular team members can use the send queue without seeing app IDs, tokens, endpoints, or OAuth codes. If Amazon shows a callback URL instead of returning cleanly, use the troubleshooting section on `/automation.html` to paste the full callback URL before the temporary code expires.
 
 To complete live ordering, connect the processing endpoint to the approved Amazon Business buying workflow for your account, then map each generated `amazonPayload` to that API's order creation request. Keeping this boundary explicit prevents accidental gift sends while campaign setup is still being tested.
 

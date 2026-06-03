@@ -42,7 +42,7 @@
               <p class="eyebrow">Guided setup</p>
               <h2>Connect Amazon once, then keep the team out of the technical details.</h2>
             </div>
-            <button class="button button-dark" id="connectAmazonButton" type="button">Connect Amazon Business</button>
+            <button class="button button-dark admin-amazon-control" id="connectAmazonButton" type="button" hidden>Connect Amazon Business</button>
           </div>
 
           <div class="automation-result is-visible" id="automationStatus" role="status" aria-live="polite">
@@ -74,7 +74,7 @@
             </article>
           </div>
 
-          <details class="credential-guide advanced-api-panel">
+          <details class="credential-guide advanced-api-panel admin-amazon-control" hidden>
             <summary>Admin setup details</summary>
             <div class="form-grid two-col compact automation-settings">
               <label class="full-span">
@@ -103,7 +103,7 @@
             </div>
           </details>
 
-          <details class="credential-guide">
+          <details class="credential-guide admin-amazon-control" hidden>
             <summary>Troubleshooting: paste Amazon's temporary code</summary>
             <div class="manual-code-box">
               <p>Most users will never need this. If Amazon shows a callback page instead of returning here, paste the full callback URL and GiftFlow will finish the connection.</p>
@@ -181,6 +181,6 @@
       </section>
     </main>
 
-    <script src="/automation.js"></script>
+    <script src="/automation.js?v=20260603-admin-amazon"></script>
   </body>
 </html>

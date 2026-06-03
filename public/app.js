@@ -147,6 +147,20 @@ let currentUser = null;
 let amazonConnectionConfig = null;
 let pendingPasswordResetToken = "";
 
+function canManageAmazonConnection() {
+  return Boolean(authConfig?.permissions?.giftIdeaAdmin || currentUser?.role === "admin");
+}
+
+function applyAmazonAdminVisibility() {
+  const canManage = canManageAmazonConnection();
+  document.querySelectorAll(".admin-amazon-control").forEach((element) => {
+    element.hidden = !canManage;
+    if (!canManage && element.matches("details")) {
+      element.open = false;
+    }
+  });
+}
+
 async function initAuth() {
   const authMessage = consumeAuthMessage();
   const resetToken = consumePasswordResetToken();
@@ -341,9 +355,12 @@ function showApp() {
   byId("appHeader").hidden = false;
   byId("appShell").hidden = false;
   byId("userBadge").textContent = currentUser?.email ? `Signed in as ${currentUser.email}` : "";
+  applyAmazonAdminVisibility();
   render();
-  loadAmazonConnectionConfig();
-  consumeStoredAmazonOAuthResult();
+  if (canManageAmazonConnection()) {
+    loadAmazonConnectionConfig();
+    consumeStoredAmazonOAuthResult();
+  }
   byId("campaign").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -1333,7 +1350,7 @@ function syncSettingsFromInputs() {
 async function loadAmazonConnectionConfig() {
   const status = byId("amazonConnectionStatus");
   const button = byId("connectAmazonButton");
-  if (!status || !button || !currentUser) return;
+  if (!status || !button || !currentUser || !canManageAmazonConnection()) return;
 
   status.textContent = "Checking Amazon Business connection setup...";
   button.disabled = false;
@@ -1385,6 +1402,11 @@ function applyAmazonConnectionConfig() {
 }
 
 async function connectAmazonBusiness() {
+  if (!canManageAmazonConnection()) {
+    showResult("Only a workspace admin can connect Amazon Business. You can keep building campaigns and processing the review queue.", false);
+    return;
+  }
+
   const popup = window.open("", "giftflowAmazonOAuth", "width=760,height=780");
   if (popup) {
     popup.document.write("<!doctype html><title>Checking Amazon setup</title><p style=\"font-family:Arial,sans-serif;padding:24px\">Checking Amazon Business setup...</p>");
@@ -1413,6 +1435,7 @@ async function connectAmazonBusiness() {
 }
 
 function receiveAmazonOAuthMessage(event) {
+  if (!canManageAmazonConnection()) return;
   if (event.origin !== window.location.origin) return;
   const payload = event.data || {};
   if (payload.type !== "giftflow-amazon-oauth") return;
@@ -1420,6 +1443,7 @@ function receiveAmazonOAuthMessage(event) {
 }
 
 function consumeStoredAmazonOAuthResult() {
+  if (!canManageAmazonConnection()) return;
   const raw = localStorage.getItem(amazonOAuthResultKey);
   if (!raw) return;
 
@@ -1432,6 +1456,7 @@ function consumeStoredAmazonOAuthResult() {
 }
 
 function applyAmazonOAuthResult(payload) {
+  if (!canManageAmazonConnection()) return;
   if (!payload || payload.type !== "giftflow-amazon-oauth") return;
 
   if (!payload.ok) {

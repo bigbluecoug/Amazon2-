@@ -1290,6 +1290,21 @@ function require_gift_idea_admin(): ?array
     return null;
 }
 
+function require_workspace_admin(): ?array
+{
+    $user = require_user();
+    if ($user === null) {
+        return null;
+    }
+
+    if (gift_idea_admin($user)) {
+        return $user;
+    }
+
+    json_response(['ok' => false, 'errors' => ['You are not authorized to manage workspace admin settings.']], 403);
+    return null;
+}
+
 function read_json_body(): array
 {
     $raw = file_get_contents('php://input');
@@ -1675,7 +1690,7 @@ function handle_request(): void
     }
 
     if ($path === '/api/amazon/oauth/config') {
-        if (require_user() === null) {
+        if (require_workspace_admin() === null) {
             return;
         }
 
@@ -1710,7 +1725,7 @@ function handle_request(): void
     }
 
     if ($path === '/api/amazon/oauth/start') {
-        if (require_user() === null) {
+        if (require_workspace_admin() === null) {
             return;
         }
 
@@ -1743,7 +1758,7 @@ function handle_request(): void
     }
 
     if ($path === '/api/amazon/oauth/exchange') {
-        if (require_user() === null) {
+        if (require_workspace_admin() === null) {
             return;
         }
 
