@@ -63,6 +63,9 @@ GOOGLE_REDIRECT_URI = ENV.fetch("GOOGLE_REDIRECT_URI", "").strip
 GOOGLE_ALLOWED_EMAILS = ENV.fetch("GOOGLE_ALLOWED_EMAILS", AUTH_EMAIL).split(",").map { |email| email.strip.downcase }.reject(&:empty?)
 GOOGLE_ALLOWED_DOMAINS = ENV.fetch("GOOGLE_ALLOWED_DOMAINS", "").split(",").map { |domain| domain.strip.downcase.delete_prefix("@") }.reject(&:empty?)
 GOOGLE_LOGIN_ENABLED = ENV.fetch("ENABLE_GOOGLE_LOGIN", "false").strip.downcase == "true"
+OPENAI_API_KEY = ENV.fetch("OPENAI_API_KEY", ENV.fetch("AI_API_KEY", "")).strip
+OPENAI_MODEL = ENV.fetch("OPENAI_MODEL", "gpt-4.1-mini").strip
+OPENAI_RESPONSES_ENDPOINT = ENV.fetch("OPENAI_RESPONSES_ENDPOINT", "https://api.openai.com/v1/responses").strip
 AMAZON_BUSINESS_APPLICATION_ID = ENV.fetch("AMAZON_BUSINESS_APPLICATION_ID", "").strip
 AMAZON_BUSINESS_CLIENT_ID = ENV.fetch("AMAZON_BUSINESS_CLIENT_ID", "").strip
 AMAZON_BUSINESS_CLIENT_SECRET = ENV.fetch("AMAZON_BUSINESS_CLIENT_SECRET", "").strip
@@ -114,6 +117,8 @@ def sequence_signature(steps)
       step["itemName"].to_s,
       step["asin"].to_s,
       step["itemUrl"].to_s,
+      step["imageUrl"].to_s,
+      step["imageUrlSavedAt"].to_s,
       step["quantity"].to_i,
       step["message"].to_s,
       step["emailSubjectWhenSent"].to_s,
@@ -562,6 +567,123 @@ rescue JSON::ParserError
   raise "OAuth provider returned an unreadable response."
 rescue Errno::ECONNREFUSED, SocketError, Net::OpenTimeout, Net::ReadTimeout
   raise "OAuth request could not reach the provider. Check outbound HTTPS from the server."
+end
+
+def post_json_request(url, headers = {}, body = {})
+  uri = URI(url)
+  request = Net::HTTP::Post.new(uri)
+  headers.each { |key, value| request[key] = value }
+  request["Content-Type"] ||= "application/json"
+  request.body = JSON.generate(body)
+
+  response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https", open_timeout: 12, read_timeout: 20) do |http|
+    http.request(request)
+  end
+
+  payload = JSON.parse(response.body.to_s)
+  unless response.is_a?(Net::HTTPSuccess)
+    raise(payload["error"].is_a?(Hash) ? payload["error"]["message"].to_s : "AI request failed.")
+  end
+  payload
+rescue JSON::ParserError
+  raise "AI provider returned an unreadable response."
+rescue Errno::ECONNREFUSED, SocketError, Net::OpenTimeout, Net::ReadTimeout
+  raise "AI request could not reach the provider. Check outbound HTTPS from the server."
+end
+
+def openai_configured?
+  present?(OPENAI_API_KEY)
+end
+
+def gift_enrichment_schema
+  {
+    type: "json_schema",
+    name: "gift_enrichment",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        itemName: { type: "string" },
+        asin: { type: "string" },
+        giftMessage: { type: "string" },
+        imageUrl: { type: "string" },
+        imageNote: { type: "string" }
+      },
+      required: %w[itemName asin giftMessage imageUrl imageNote]
+    }
+  }
+end
+
+def extract_openai_text(payload)
+  payload.fetch("output", []).each do |item|
+    item.fetch("content", []).each do |content|
+      text = content["text"].to_s
+      return text if content["type"].to_s == "output_text" && present?(text)
+    end
+  end
+  ""
+end
+
+def safe_image_url?(value)
+  url = value.to_s.strip
+  return false unless url.match?(/\Ahttps?:\/\//i)
+
+  uri = URI(url)
+  %w[m.media-amazon.com images-na.ssl-images-amazon.com].include?(uri.host.to_s.downcase) &&
+    uri.path.match?(/\.(?:jpg|jpeg|png|webp)(?:\z|\?)/i)
+rescue URI::InvalidURIError
+  false
+end
+
+def enrich_amazon_gift(payload)
+  raise "AI enrichment is not configured on this server." unless openai_configured?
+
+  item_url = payload.fetch("itemUrl", "").to_s.strip
+  raise "Paste an Amazon product URL before using AI fill." unless present?(item_url)
+
+  local_asin = payload.fetch("asin", "").to_s.strip
+  local_title = payload.fetch("title", "").to_s.strip
+  current_name = payload.fetch("currentName", "").to_s.strip
+  owner = payload.fetch("owner", "").to_s.strip
+  prompt = {
+    itemUrl: item_url,
+    asinFromUrlParser: local_asin,
+    titleFromUrlSlug: local_title,
+    currentGiftName: current_name,
+    campaignOwner: owner
+  }
+
+  response = post_json_request(
+    OPENAI_RESPONSES_ENDPOINT,
+    { "Authorization" => "Bearer #{OPENAI_API_KEY}" },
+    {
+      model: OPENAI_MODEL,
+      instructions: [
+        "You help GiftFlow fill a gift-sequence card from an Amazon product URL.",
+        "Infer only lightweight product metadata from the provided URL, ASIN, and slug text.",
+        "Do not claim you verified live Amazon page details.",
+        "Do not invent official Amazon product image URLs.",
+        "Set imageUrl to an empty string unless the provided input includes a safe direct image URL.",
+        "Write giftMessage with {{firstName}} and {{owner}} placeholders when useful.",
+        "Keep all fields concise."
+      ].join(" "),
+      input: JSON.generate(prompt),
+      text: { format: gift_enrichment_schema },
+      max_output_tokens: 450
+    }
+  )
+
+  enrichment = JSON.parse(extract_openai_text(response))
+  image_url = enrichment.fetch("imageUrl", "").to_s.strip
+  enrichment["imageUrl"] = safe_image_url?(image_url) ? image_url : ""
+  enrichment["asin"] = enrichment.fetch("asin", "").to_s.strip.upcase
+  enrichment["itemName"] = enrichment.fetch("itemName", "").to_s.strip
+  enrichment["giftMessage"] = enrichment.fetch("giftMessage", "").to_s.strip
+  enrichment["imageNote"] = enrichment.fetch("imageNote", "").to_s.strip
+  enrichment
+rescue JSON::ParserError
+  raise "AI provider returned enrichment in an unreadable format."
 end
 
 def exchange_google_code(code, request)
@@ -1066,6 +1188,19 @@ server.mount_proc("/api/amazon/oauth/config") do |request, response|
     endpoint: AMAZON_BUSINESS_API_ENDPOINT,
     redirectUri: amazon_redirect_uri(request)
   })
+end
+
+server.mount_proc("/api/amazon/enrich") do |request, response|
+  next unless require_user(request, response)
+
+  begin
+    payload = JSON.parse(request.body.to_s)
+    json_response(response, { ok: true, enrichment: enrich_amazon_gift(payload) })
+  rescue JSON::ParserError
+    json_response(response, { ok: false, errors: ["Request body must be valid JSON."] }, 400)
+  rescue StandardError => error
+    json_response(response, { ok: false, errors: [error.message] }, 422)
+  end
 end
 
 server.mount_proc("/api/amazon/oauth/start") do |request, response|

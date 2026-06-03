@@ -57,6 +57,7 @@ const demoState = () => ({
       itemName: "Premium coffee box",
       asin: "B000TEST1",
       itemUrl: "",
+      aiEnrichedUrl: "",
       imageUrl: "",
       imageUrlSavedAt: "",
       quantity: 1,
@@ -75,6 +76,7 @@ const demoState = () => ({
       itemName: "Desk notebook",
       asin: "B000TEST2",
       itemUrl: "",
+      aiEnrichedUrl: "",
       imageUrl: "",
       imageUrlSavedAt: "",
       quantity: 1,
@@ -797,6 +799,24 @@ function renderStatus() {
     : "Any gift edit requires a fresh confirmation before orders can run.";
 }
 
+function renderStepImagePreview(step, node) {
+  const imageInput = node.querySelector('[data-field="imageUrl"]');
+  const imagePreview = node.querySelector("[data-image-preview]");
+  if (!imageInput || !imagePreview) return;
+
+  if (imageInput.value.trim() !== step.imageUrl) {
+    step.imageUrl = imageInput.value.trim();
+    step.imageUrlSavedAt = step.imageUrl ? new Date().toISOString() : "";
+  }
+
+  const imageUrl = freshAmazonImageUrl({ url: step.imageUrl, savedAt: step.imageUrlSavedAt });
+  const emptyMessage = step.imageUrl && !imageUrl ? "Image link expired" : "No image added";
+  imagePreview.innerHTML = imageUrl
+    ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(step.itemName || "Gift image")}">`
+    : `<span>${emptyMessage}</span>`;
+  imagePreview.classList.toggle("is-empty", !imageUrl);
+}
+
 function renderSteps() {
   const list = byId("stepList");
   const template = byId("stepTemplate");
@@ -840,39 +860,50 @@ function renderSteps() {
 
       const urlInput = node.querySelector('[data-field="itemUrl"]');
       const imageInput = node.querySelector('[data-field="imageUrl"]');
-      const imagePreview = node.querySelector("[data-image-preview]");
       const fillButton = node.querySelector(".fill-amazon-details");
-      const fillFromUrl = () => populateAmazonFields(step, node);
-      const renderStepImage = () => {
-        if (imageInput.value.trim() !== step.imageUrl) {
-          step.imageUrl = imageInput.value.trim();
-          step.imageUrlSavedAt = step.imageUrl ? new Date().toISOString() : "";
-        }
-
-        const imageUrl = freshAmazonImageUrl({ url: step.imageUrl, savedAt: step.imageUrlSavedAt });
-        const emptyMessage = step.imageUrl && !imageUrl ? "Image link expired" : "No image added";
-        imagePreview.innerHTML = imageUrl
-          ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(step.itemName || "Gift image")}">`
-          : `<span>${emptyMessage}</span>`;
-        imagePreview.classList.toggle("is-empty", !imageUrl);
+      const fillFromUrl = (options = {}) => populateAmazonFields(step, node, options);
+      let amazonFillTimer = null;
+      const runFillFromUrl = (options = {}) => {
+        clearTimeout(amazonFillTimer);
+        amazonFillTimer = null;
+        fillFromUrl(options);
       };
-      urlInput.addEventListener("change", fillFromUrl);
-      urlInput.addEventListener("blur", fillFromUrl);
-      imageInput.addEventListener("input", renderStepImage);
-      fillButton.addEventListener("click", fillFromUrl);
-      renderStepImage();
+      urlInput.addEventListener("input", () => {
+        clearTimeout(amazonFillTimer);
+        const details = parseAmazonUrl(urlInput.value);
+        if (!details.asin && !details.title) return;
+        amazonFillTimer = setTimeout(() => {
+          amazonFillTimer = null;
+          fillFromUrl();
+        }, 700);
+      });
+      urlInput.addEventListener("change", () => runFillFromUrl());
+      urlInput.addEventListener("blur", () => runFillFromUrl());
+      imageInput.addEventListener("input", () => renderStepImagePreview(step, node));
+      fillButton.addEventListener("click", () => runFillFromUrl({ force: true }));
+      renderStepImagePreview(step, node);
 
       list.appendChild(node);
     });
 }
 
-function populateAmazonFields(step, node) {
+function amazonEnrichmentErrorMessage(payload) {
+  const message = payload.errors?.join(" ") || "AI enrichment is not available.";
+  return message.toLowerCase().includes("not configured")
+    ? "AI fill is not set up on this site yet."
+    : message;
+}
+
+async function populateAmazonFields(step, node, options = {}) {
   const details = parseAmazonUrl(step.itemUrl);
   const status = node.querySelector(".amazon-lookup-status");
   if (!details.asin && !details.title) {
     status.textContent = "I could not find an ASIN in that URL. Try a product URL that includes /dp/ or /gp/product/.";
     return;
   }
+
+  const previousName = step.itemName || "";
+  const previousMessage = step.message || "";
 
   if (details.asin) {
     step.asin = details.asin;
@@ -900,7 +931,86 @@ function populateAmazonFields(step, node) {
   const parts = [];
   if (details.asin) parts.push(`ASIN ${details.asin}`);
   if (details.title && step.itemName === details.title) parts.push("gift name");
-  status.textContent = `Filled ${parts.join(" and ")} from the Amazon URL.`;
+  const localFillSummary = parts.length ? `Filled ${parts.join(" and ")} from the Amazon URL.` : "Read the Amazon URL.";
+  status.textContent = `${localFillSummary} Checking AI enrichment...`;
+
+  if (!options.force && step.aiEnrichedUrl === step.itemUrl) {
+    status.textContent = localFillSummary;
+    return;
+  }
+
+  const fillButton = node.querySelector(".fill-amazon-details");
+  if (fillButton) {
+    fillButton.disabled = true;
+    fillButton.textContent = "Filling...";
+  }
+
+  try {
+    const response = await fetch("/api/amazon/enrich", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        itemUrl: step.itemUrl,
+        asin: details.asin,
+        title: details.title,
+        currentName: previousName,
+        owner: state.campaign.owner || ""
+      })
+    });
+    const payload = await response.json();
+    if (!payload.ok) {
+      status.textContent = `${localFillSummary} ${amazonEnrichmentErrorMessage(payload)}`;
+      return;
+    }
+
+    const enrichment = payload.enrichment || {};
+    const generatedName = String(enrichment.itemName || "").trim();
+    const generatedAsin = String(enrichment.asin || "").trim().toUpperCase();
+    const generatedMessage = String(enrichment.giftMessage || "").trim();
+    const generatedImageUrl = String(enrichment.imageUrl || "").trim();
+    const imageNote = String(enrichment.imageNote || "").trim();
+
+    if (generatedAsin && generatedAsin.length === 10) {
+      step.asin = generatedAsin;
+      node.querySelector('[data-field="asin"]').value = generatedAsin;
+    }
+    if (generatedName && (!previousName || previousName === details.title || previousName.startsWith("Amazon item "))) {
+      step.itemName = generatedName;
+      node.querySelector('[data-field="itemName"]').value = generatedName;
+    }
+    if (generatedMessage && (!previousMessage || previousMessage.includes("thought this would make"))) {
+      step.message = generatedMessage;
+      node.querySelector('[data-field="message"]').value = generatedMessage;
+    }
+    if (generatedImageUrl && !step.imageUrl) {
+      step.imageUrl = generatedImageUrl;
+      step.imageUrlSavedAt = new Date().toISOString();
+      node.querySelector('[data-field="imageUrl"]').value = generatedImageUrl;
+      renderStepImagePreview(step, node);
+    }
+
+    step.aiEnrichedUrl = step.itemUrl;
+    markSequenceDirty();
+    renderMetrics();
+    renderStatus();
+    silentSave();
+
+    const aiParts = [];
+    if (generatedName && step.itemName === generatedName) aiParts.push("gift name");
+    if (generatedAsin && step.asin === generatedAsin) aiParts.push("ASIN");
+    if (generatedMessage && step.message === generatedMessage) aiParts.push("message");
+    if (generatedImageUrl && step.imageUrl === generatedImageUrl) aiParts.push("image");
+    const aiSummary = aiParts.length ? `AI filled ${aiParts.join(", ")}.` : "AI checked the URL.";
+    status.textContent = imageNote ? `${aiSummary} ${imageNote}` : aiSummary;
+  } catch (_error) {
+    status.textContent = `${localFillSummary} AI enrichment could not run right now.`;
+  } finally {
+    if (fillButton) {
+      fillButton.disabled = false;
+      fillButton.textContent = "Fill details";
+    }
+  }
 }
 
 function parseAmazonUrl(value) {
@@ -1084,6 +1194,7 @@ function addStep() {
     itemName: "",
     asin: "",
     itemUrl: "",
+    aiEnrichedUrl: "",
     imageUrl: "",
     imageUrlSavedAt: "",
     quantity: 1,
@@ -1113,6 +1224,7 @@ function useAffiliateIdea(index) {
       itemName: "",
       asin: "",
       itemUrl: "",
+      aiEnrichedUrl: "",
       imageUrl: "",
       imageUrlSavedAt: "",
       quantity: 1,

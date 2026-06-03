@@ -149,6 +149,27 @@ function google_login_configured(): bool
         (count(google_allowed_emails()) > 0 || count(google_allowed_domains()) > 0);
 }
 
+function openai_api_key(): string
+{
+    $key = trim(env_value('OPENAI_API_KEY', ''));
+    return $key !== '' ? $key : trim(env_value('AI_API_KEY', ''));
+}
+
+function openai_model(): string
+{
+    return trim(env_value('OPENAI_MODEL', 'gpt-4.1-mini'));
+}
+
+function openai_responses_endpoint(): string
+{
+    return trim(env_value('OPENAI_RESPONSES_ENDPOINT', 'https://api.openai.com/v1/responses'));
+}
+
+function openai_configured(): bool
+{
+    return present(openai_api_key());
+}
+
 function amazon_application_id(): string
 {
     return trim(env_value('AMAZON_BUSINESS_APPLICATION_ID', ''));
@@ -837,6 +858,165 @@ function http_json_request(string $method, string $url, array $headers = [], str
     return $decoded;
 }
 
+function post_json_request(string $url, array $headers, array $body): array
+{
+    $headers[] = 'Content-Type: application/json';
+    $status = 0;
+    $encodedBody = json_encode($body, JSON_UNESCAPED_SLASHES);
+
+    if (function_exists('curl_init')) {
+        $curl = curl_init($url);
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($curl, CURLOPT_POST, true);
+        curl_setopt($curl, CURLOPT_TIMEOUT, 20);
+        curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($curl, CURLOPT_POSTFIELDS, $encodedBody);
+
+        $response = curl_exec($curl);
+        $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+        $curlError = curl_error($curl);
+        curl_close($curl);
+
+        if ($response === false) {
+            throw new RuntimeException('AI request could not reach the provider. ' . ($curlError ?: 'Check outbound HTTPS from Forge.'));
+        }
+    } else {
+        $options = [
+            'http' => [
+                'method' => 'POST',
+                'header' => implode("\r\n", $headers),
+                'content' => $encodedBody,
+                'ignore_errors' => true,
+                'timeout' => 20,
+            ],
+        ];
+        $response = @file_get_contents($url, false, stream_context_create($options));
+        if ($response === false) {
+            throw new RuntimeException('AI request could not reach the provider. Check outbound HTTPS from Forge.');
+        }
+
+        $responseHeaders = $http_response_header ?? [];
+        if (isset($responseHeaders[0]) && preg_match('/\s(\d{3})\s/', $responseHeaders[0], $matches)) {
+            $status = (int) $matches[1];
+        }
+    }
+
+    $decoded = json_decode((string) $response, true);
+    if (!is_array($decoded)) {
+        throw new RuntimeException('AI provider returned an unreadable response.');
+    }
+
+    if ($status < 200 || $status >= 300) {
+        $error = $decoded['error'] ?? null;
+        $message = is_array($error) ? (string) ($error['message'] ?? 'AI request failed.') : 'AI request failed.';
+        throw new RuntimeException($message);
+    }
+
+    return $decoded;
+}
+
+function gift_enrichment_schema(): array
+{
+    return [
+        'type' => 'json_schema',
+        'name' => 'gift_enrichment',
+        'strict' => true,
+        'schema' => [
+            'type' => 'object',
+            'additionalProperties' => false,
+            'properties' => [
+                'itemName' => ['type' => 'string'],
+                'asin' => ['type' => 'string'],
+                'giftMessage' => ['type' => 'string'],
+                'imageUrl' => ['type' => 'string'],
+                'imageNote' => ['type' => 'string'],
+            ],
+            'required' => ['itemName', 'asin', 'giftMessage', 'imageUrl', 'imageNote'],
+        ],
+    ];
+}
+
+function extract_openai_text(array $payload): string
+{
+    foreach (($payload['output'] ?? []) as $item) {
+        foreach (($item['content'] ?? []) as $content) {
+            $text = (string) ($content['text'] ?? '');
+            if (($content['type'] ?? '') === 'output_text' && $text !== '') {
+                return $text;
+            }
+        }
+    }
+
+    return '';
+}
+
+function safe_image_url($value): bool
+{
+    $url = trim((string) $value);
+    if (!preg_match('/^https?:\/\//i', $url)) {
+        return false;
+    }
+
+    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+    $path = strtolower((string) parse_url($url, PHP_URL_PATH));
+    return in_array($host, ['m.media-amazon.com', 'images-na.ssl-images-amazon.com'], true) &&
+        preg_match('/\.(jpg|jpeg|png|webp)$/i', $path) === 1;
+}
+
+function enrich_amazon_gift(array $payload): array
+{
+    if (!openai_configured()) {
+        throw new RuntimeException('AI enrichment is not configured on this server.');
+    }
+
+    $itemUrl = trim((string) ($payload['itemUrl'] ?? ''));
+    if ($itemUrl === '') {
+        throw new InvalidArgumentException('Paste an Amazon product URL before using AI fill.');
+    }
+
+    $prompt = [
+        'itemUrl' => $itemUrl,
+        'asinFromUrlParser' => trim((string) ($payload['asin'] ?? '')),
+        'titleFromUrlSlug' => trim((string) ($payload['title'] ?? '')),
+        'currentGiftName' => trim((string) ($payload['currentName'] ?? '')),
+        'campaignOwner' => trim((string) ($payload['owner'] ?? '')),
+    ];
+
+    $response = post_json_request(
+        openai_responses_endpoint(),
+        ['Authorization: Bearer ' . openai_api_key()],
+        [
+            'model' => openai_model(),
+            'instructions' => implode(' ', [
+                'You help GiftFlow fill a gift-sequence card from an Amazon product URL.',
+                'Infer only lightweight product metadata from the provided URL, ASIN, and slug text.',
+                'Do not claim you verified live Amazon page details.',
+                'Do not invent official Amazon product image URLs.',
+                'Set imageUrl to an empty string unless the provided input includes a safe direct image URL.',
+                'Write giftMessage with {{firstName}} and {{owner}} placeholders when useful.',
+                'Keep all fields concise.',
+            ]),
+            'input' => json_encode($prompt, JSON_UNESCAPED_SLASHES),
+            'text' => ['format' => gift_enrichment_schema()],
+            'max_output_tokens' => 450,
+        ]
+    );
+
+    $enrichment = json_decode(extract_openai_text($response), true);
+    if (!is_array($enrichment)) {
+        throw new RuntimeException('AI provider returned enrichment in an unreadable format.');
+    }
+
+    $imageUrl = trim((string) ($enrichment['imageUrl'] ?? ''));
+    return [
+        'itemName' => trim((string) ($enrichment['itemName'] ?? '')),
+        'asin' => strtoupper(trim((string) ($enrichment['asin'] ?? ''))),
+        'giftMessage' => trim((string) ($enrichment['giftMessage'] ?? '')),
+        'imageUrl' => safe_image_url($imageUrl) ? $imageUrl : '',
+        'imageNote' => trim((string) ($enrichment['imageNote'] ?? '')),
+    ];
+}
+
 function exchange_google_code(string $code): array
 {
     return http_json_request(
@@ -1166,6 +1346,8 @@ function sequence_signature(array $steps): string
             (string) ($step['itemName'] ?? ''),
             (string) ($step['asin'] ?? ''),
             (string) ($step['itemUrl'] ?? ''),
+            (string) ($step['imageUrl'] ?? ''),
+            (string) ($step['imageUrlSavedAt'] ?? ''),
             (int) ($step['quantity'] ?? 0),
             (string) ($step['message'] ?? ''),
             (string) ($step['emailSubjectWhenSent'] ?? ''),
@@ -1508,6 +1690,22 @@ function handle_request(): void
             'endpoint' => amazon_api_endpoint(),
             'redirectUri' => amazon_redirect_uri(),
         ]);
+        return;
+    }
+
+    if ($path === '/api/amazon/enrich') {
+        if (require_user() === null) {
+            return;
+        }
+
+        try {
+            $payload = read_json_body();
+            json_response(['ok' => true, 'enrichment' => enrich_amazon_gift($payload)]);
+        } catch (InvalidArgumentException $error) {
+            json_response(['ok' => false, 'errors' => [$error->getMessage()]], 400);
+        } catch (Throwable $error) {
+            json_response(['ok' => false, 'errors' => [$error->getMessage()]], 422);
+        }
         return;
     }
 

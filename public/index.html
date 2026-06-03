@@ -581,15 +581,15 @@
               <input data-field="itemUrl" type="url" placeholder="https://www.amazon.com/.../dp/B000000000">
               <button class="button button-light fill-amazon-details" type="button">Fill details</button>
             </div>
-            <small class="field-hint amazon-lookup-status">Paste a product URL to fill ASIN and a product-name guess.</small>
+            <small class="field-hint amazon-lookup-status">Paste a product URL to fill ASIN, gift details, and image when a safe source is available.</small>
           </label>
           <label class="full-span">
             <span>Amazon product image URL</span>
             <div class="gift-image-row">
               <figure class="gift-image-preview is-empty" data-image-preview><span>No image added</span></figure>
-              <input data-field="imageUrl" type="url" placeholder="Paste official PA-API image URL">
+              <input data-field="imageUrl" type="url" placeholder="AI will fill when safe, or paste official PA-API image URL">
             </div>
-            <small class="field-hint">Use image URLs from Amazon's approved Associates or Product Advertising API tools.</small>
+            <small class="field-hint">AI may enrich the gift details from the URL. Official product photos still need approved Associates or Product Advertising API image URLs.</small>
           </label>
           <label>
             <span>Quantity</span>
@@ -628,6 +628,6 @@
       </article>
     </template>
 
-    <script src="/app.js"></script>
+    <script src="/app.js?v=20260603-ai-fill"></script>
   </body>
 </html>

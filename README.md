@@ -147,6 +147,10 @@ GIFT_IDEA_ADMIN_EMAILS="you@company.com,teammate@company.com"
 
 For product images, use URLs from Amazon's approved Associates or Product Advertising API tools. Do not copy, download, or re-host product images from Amazon product pages.
 
+## AI Gift Enrichment
+
+If `OPENAI_API_KEY` is set on the server, GiftFlow can enrich a gift step after a user pastes an Amazon product URL. The browser sends the URL, parsed ASIN, and URL-derived title to `POST /api/amazon/enrich`; the API key stays on the server. AI can fill a cleaner gift name, ASIN, and gift message. It only fills an image URL when a safe direct image URL is available, so official Amazon product photos should still come from approved Associates or Product Advertising API image URLs.
+
 ## CSV Import Format
 
 Paste one prospect per line:
