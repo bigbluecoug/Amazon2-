@@ -1,0 +1,36 @@
+<?php
+declare(strict_types=1);
+
+$command = $argv[1] ?? 'list';
+$noOpCommands = [
+    'about',
+    'cache:clear',
+    'config:cache',
+    'config:clear',
+    'event:cache',
+    'event:clear',
+    'migrate',
+    'optimize',
+    'optimize:clear',
+    'package:discover',
+    'queue:restart',
+    'route:cache',
+    'route:clear',
+    'storage:link',
+    'view:cache',
+    'view:clear',
+];
+
+if (in_array($command, $noOpCommands, true)) {
+    fwrite(STDOUT, "GiftFlow is not a Laravel app; '{$command}' is not required.\n");
+    exit(0);
+}
+
+if ($command === 'list' || $command === '--version' || $command === '-V') {
+    fwrite(STDOUT, "GiftFlow Studio deployment helper\n");
+    fwrite(STDOUT, "This project is a plain PHP app. Laravel Artisan commands are skipped.\n");
+    exit(0);
+}
+
+fwrite(STDERR, "GiftFlow does not support artisan command '{$command}'.\n");
+exit(1);

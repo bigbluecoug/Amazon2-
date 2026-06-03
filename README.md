@@ -58,6 +58,18 @@ Use a long random value for `SESSION_SECRET`; for example:
 openssl rand -hex 32
 ```
 
+## Deploy It On Forge
+
+GiftFlow is a plain PHP app, not a Laravel app. If Forge creates the site with Laravel defaults, remove unguarded `php artisan ...` lines from the deployment script. A safe deploy script is:
+
+```bash
+cd /home/forge/amazon2-vxatoi5g.on-forge.com
+git pull origin main
+composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+```
+
+Set the site web directory to `/public` if Forge asks for one. The repository also includes a small `artisan` compatibility helper so default Forge scripts that still call common Laravel commands can skip them cleanly.
+
 ## Account Login Setup
 
 The app supports account creation with email and password. Accounts are stored server-side in `data/users.json`, and passwords are stored as salted hashes. The first created account is marked as an admin for editing gift ideas.
