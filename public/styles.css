@@ -154,6 +154,21 @@ a {
   line-height: 1.45;
 }
 
+.auth-status a {
+  font-weight: 900;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.reset-link-box {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid rgba(31, 157, 104, 0.25);
+  border-radius: 8px;
+  background: rgba(31, 157, 104, 0.1);
+  color: var(--ink);
+}
+
 .auth-setup {
   margin-top: 22px;
   border: 1px solid rgba(13, 13, 13, 0.12);
@@ -1617,6 +1632,69 @@ textarea:focus {
 
 .automation-settings {
   margin-top: 22px;
+}
+
+.automation-setup-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.automation-setup-list article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(13, 13, 13, 0.1);
+  border-radius: 8px;
+  background: #fbfaf6;
+}
+
+.automation-setup-list article > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.automation-setup-list strong {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.automation-setup-list p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.automation-setup-list article.is-ready {
+  border-color: rgba(31, 157, 104, 0.32);
+  background: rgba(31, 157, 104, 0.09);
+}
+
+.automation-setup-list article.is-ready > span {
+  background: #1f9d68;
+}
+
+.automation-setup-list article.is-waiting > span {
+  background: #8a8172;
+}
+
+.automation-setup-list article.is-blocked {
+  border-color: rgba(255, 107, 87, 0.3);
+  background: rgba(255, 107, 87, 0.09);
+}
+
+.automation-setup-list article.is-blocked > span {
+  background: #d95b4c;
 }
 
 .copy-row {

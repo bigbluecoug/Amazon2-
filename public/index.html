@@ -112,6 +112,7 @@
         </div>
         <div class="auth-actions">
           <button class="button button-dark" id="passwordSignInButton" type="submit">Sign in</button>
+          <button class="button button-light" id="showPasswordResetButton" type="button">Forgot password?</button>
           <button class="button button-light" id="showCreateAccountButton" type="button">Create account</button>
           <button class="button button-light" id="demoLoginButton" type="button" hidden>Open demo workspace</button>
           <button class="button button-light" id="backToIntroButton" type="button">Back to intro</button>
@@ -126,6 +127,45 @@
             <li>Keep a long random <code>SESSION_SECRET</code> set on Forge.</li>
           </ol>
         </details>
+      </form>
+
+      <form class="auth-panel" id="passwordResetRequestPanel" hidden>
+        <p class="launch-note">Password reset</p>
+        <h1>Get back into GiftFlow.</h1>
+        <p class="lede">Enter your workspace email. If there is a matching account, GiftFlow will create a short-lived reset link.</p>
+        <div class="form-grid auth-fields">
+          <label>
+            <span>Email address</span>
+            <input id="resetEmail" type="email" autocomplete="email" required>
+          </label>
+        </div>
+        <div class="auth-actions">
+          <button class="button button-dark" type="submit">Create reset link</button>
+          <button class="button button-light" id="resetBackToSignInButton" type="button">Back to sign in</button>
+        </div>
+        <p class="auth-status" id="passwordResetRequestStatus">Reset links expire after 30 minutes.</p>
+        <p class="auth-status reset-link-box" id="passwordResetLinkBox" hidden></p>
+      </form>
+
+      <form class="auth-panel" id="passwordResetConfirmPanel" hidden>
+        <p class="launch-note">Choose a new password</p>
+        <h1>Reset your password.</h1>
+        <p class="lede">Use a new password with at least 8 characters. After saving it, GiftFlow will sign you in.</p>
+        <div class="form-grid two-col auth-fields">
+          <label>
+            <span>New password</span>
+            <input id="newPassword" type="password" autocomplete="new-password" minlength="8" required>
+          </label>
+          <label>
+            <span>Confirm new password</span>
+            <input id="confirmNewPassword" type="password" autocomplete="new-password" minlength="8" required>
+          </label>
+        </div>
+        <div class="auth-actions">
+          <button class="button button-dark" type="submit">Save new password</button>
+          <button class="button button-light" id="resetConfirmBackToSignInButton" type="button">Back to sign in</button>
+        </div>
+        <p class="auth-status" id="passwordResetConfirmStatus">This reset link can only be used once.</p>
       </form>
 
       <form class="auth-panel" id="createAccountPanel" hidden>
@@ -434,32 +474,16 @@
                 <input id="runDate" type="date">
               </label>
               <label>
-                <span>Amazon mode</span>
+                <span>Send queue mode</span>
                 <select id="amazonMode">
-                  <option value="queue-only">Queue only</option>
-                  <option value="sandbox">Sandbox simulation</option>
-                  <option value="amazon-business-api">Amazon Business API ready</option>
+                  <option value="queue-only">Review before sending</option>
+                  <option value="sandbox">Test run only</option>
+                  <option value="amazon-business-api">Connected Amazon queue</option>
                 </select>
-              </label>
-              <label>
-                <span>Marketplace</span>
-                <input id="amazonMarketplace" type="text" placeholder="ATVPDKIKX0DER">
-              </label>
-              <label>
-                <span class="label-with-help">Client ID <a href="#amazonCredentialGuide" class="need-help-link">Need help?</a></span>
-                <input id="amazonClientId" type="password" autocomplete="off">
-              </label>
-              <label>
-                <span class="label-with-help">Refresh token <a href="#amazonCredentialGuide" class="need-help-link">Need help?</a></span>
-                <input id="amazonRefreshToken" type="password" autocomplete="off">
-              </label>
-              <label>
-                <span>Endpoint</span>
-                <input id="amazonEndpoint" type="url" placeholder="https://api.business.amazon.com">
               </label>
               <div class="amazon-connect-row full-span">
                 <button class="button button-dark" id="connectAmazonButton" type="button">Connect Amazon Business</button>
-                <p id="amazonConnectionStatus">Add Amazon Business app settings on the server, then connect to receive a refresh token.</p>
+                <p id="amazonConnectionStatus">An admin connects Amazon once. After that, team members can run the send queue without handling API settings.</p>
               </div>
               <label class="full-span">
                 <span>Shipping defaults</span>
@@ -467,38 +491,46 @@
               </label>
             </div>
 
-            <details class="credential-guide" id="amazonCredentialGuide" hidden>
-              <summary>Amazon credential guide</summary>
+            <details class="credential-guide" id="amazonCredentialGuide">
+              <summary>Advanced Amazon admin settings</summary>
+              <div class="form-grid two-col compact automation-settings">
+                <label>
+                  <span>Marketplace</span>
+                  <input id="amazonMarketplace" type="text" placeholder="ATVPDKIKX0DER">
+                </label>
+                <label>
+                  <span>Client ID</span>
+                  <input id="amazonClientId" type="password" autocomplete="off">
+                </label>
+                <label>
+                  <span>Refresh token</span>
+                  <input id="amazonRefreshToken" type="password" autocomplete="off">
+                </label>
+                <label>
+                  <span>Amazon Business endpoint</span>
+                  <input id="amazonEndpoint" type="url" placeholder="https://na.business-api.amazon.com">
+                </label>
+              </div>
               <div class="credential-guide-content">
                 <article>
                   <span>01</span>
-                  <strong>Register for Amazon Business API access.</strong>
-                  <p>Create or use an Amazon Business account, register in Amazon's Solution Provider Portal, submit the developer profile request, and wait for approval for the API roles you need.</p>
+                  <strong>Admin-only setup happens outside the team workflow.</strong>
+                  <p>One workspace admin adds the Amazon Business app values to Forge. Team members should not need these fields during daily use.</p>
                 </article>
                 <article>
                   <span>02</span>
-                  <strong>Create an app client in SPP.</strong>
-                  <p>After approval, create an app client in the Solution Provider Portal. This app is what gives you Login With Amazon credentials for the integration.</p>
+                  <strong>Connect through the guided console.</strong>
+                  <p>Use the automation console to approve Amazon Business access. GiftFlow fills the private connection values after Amazon returns.</p>
                 </article>
                 <article>
                   <span>03</span>
-                  <strong>Copy the Client ID.</strong>
-                  <p>Open the app credentials in SPP and add the application ID, client ID, and client secret to Forge environment variables. Keep the client secret on the server only.</p>
+                  <strong>Keep live sending behind review.</strong>
+                  <p>GiftFlow requires sequence confirmation and ready recipients before gifts can be queued for the live connector.</p>
                 </article>
                 <article>
                   <span>04</span>
-                  <strong>Authorize the app as an Amazon Business admin.</strong>
-                  <p>Click Connect Amazon Business, sign in as the Amazon Business admin, and select Allow. GiftFlow receives the short-lived OAuth code on the callback URL.</p>
-                </article>
-                <article>
-                  <span>05</span>
-                  <strong>Exchange the OAuth code for the refresh token.</strong>
-                  <p>The backend exchanges the OAuth code with Amazon Login With Amazon and fills the refresh token here. Access tokens expire quickly, but the refresh token can request new access tokens.</p>
-                </article>
-                <article>
-                  <span>Sandbox</span>
-                  <strong>Testing shortcut.</strong>
-                  <p>For sandbox mode, create a sandbox app client, choose View sandbox credentials for the Client ID, then choose Create token in SPP to generate the sandbox refresh token.</p>
+                  <strong>Use test mode for dry runs.</strong>
+                  <p>Choose Test run only when you want to validate the flow without treating records as ready for the live connector.</p>
                 </article>
               </div>
               <div class="credential-links">

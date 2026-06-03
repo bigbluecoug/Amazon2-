@@ -47,6 +47,8 @@ USING_DEFAULT_CREDENTIALS = DEMO_LOGIN_ENABLED && (ENV["AUTH_EMAIL"].nil? || ENV
 SESSION_SECRET = ENV.fetch("SESSION_SECRET", "development-only-change-me")
 SESSION_COOKIE = "giftflow_session"
 SESSION_MAX_AGE = 60 * 60 * 24 * 7
+PASSWORD_RESET_MAX_AGE = 60 * 30
+SHOW_PASSWORD_RESET_LINKS = ENV.fetch("SHOW_PASSWORD_RESET_LINKS", "false").strip.downcase == "true"
 GOOGLE_STATE_COOKIE = "giftflow_google_state"
 GOOGLE_STATE_MAX_AGE = 600
 GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -67,7 +69,7 @@ AMAZON_BUSINESS_CLIENT_SECRET = ENV.fetch("AMAZON_BUSINESS_CLIENT_SECRET", "").s
 AMAZON_BUSINESS_REDIRECT_URI = ENV.fetch("AMAZON_BUSINESS_REDIRECT_URI", "").strip
 AMAZON_BUSINESS_MARKETPLACE_URL = ENV.fetch("AMAZON_BUSINESS_MARKETPLACE_URL", "https://www.amazon.com").strip.delete_suffix("/")
 AMAZON_BUSINESS_MARKETPLACE_ID = ENV.fetch("AMAZON_BUSINESS_MARKETPLACE_ID", "ATVPDKIKX0DER").strip
-AMAZON_BUSINESS_API_ENDPOINT = ENV.fetch("AMAZON_BUSINESS_API_ENDPOINT", "https://api.business.amazon.com").strip.delete_suffix("/")
+AMAZON_BUSINESS_API_ENDPOINT = ENV.fetch("AMAZON_BUSINESS_API_ENDPOINT", "https://na.business-api.amazon.com").strip.delete_suffix("/")
 
 MIME_TYPES = WEBrick::HTTPUtils::DefaultMimeTypes.merge(
   "js" => "application/javascript",
@@ -264,6 +266,88 @@ def verify_password_digest(password, digest)
   secure_compare(actual, expected)
 rescue ArgumentError
   false
+end
+
+def password_reset_token_digest(token)
+  OpenSSL::Digest::SHA256.hexdigest(token.to_s)
+end
+
+def password_reset_link_visible?(request)
+  return true if SHOW_PASSWORD_RESET_LINKS
+
+  host = request["host"].to_s.split(":").first.to_s.downcase
+  ["127.0.0.1", "localhost", "::1"].include?(host)
+end
+
+def password_reset_url(request, token)
+  "#{request_origin(request)}/?resetToken=#{URI.encode_www_form_component(token)}"
+end
+
+def create_password_reset_request(email, request)
+  message = "If that account exists, reset instructions will be available shortly."
+  normalized_email = normalize_email(email)
+  user = find_registered_user_by_email(normalized_email)
+  result = { "ok" => true, "message" => message }
+  return result unless user
+
+  token = base64url_encode(SecureRandom.random_bytes(32))
+  reset_url = password_reset_url(request, token)
+  users = read_registered_users
+  index = users.find_index { |record| normalize_email(record["email"]) == normalized_email }
+  return result unless index
+
+  users[index] = users[index].merge(
+    "passwordResetTokenHash" => password_reset_token_digest(token),
+    "passwordResetRequestedAt" => Time.now.utc.iso8601,
+    "passwordResetExpiresAt" => (Time.now.utc + PASSWORD_RESET_MAX_AGE).iso8601,
+    "passwordResetUsedAt" => ""
+  )
+  write_registered_users(users)
+
+  $stderr.puts("[GiftFlow] Password reset link for #{normalized_email}: #{reset_url}")
+
+  if password_reset_link_visible?(request)
+    result["message"] = "Use the reset link below to choose a new password."
+    result["resetUrl"] = reset_url
+  end
+
+  result
+end
+
+def reset_password_with_token(token, password, confirm_password)
+  errors = []
+  errors << "Reset link is missing or expired." unless present?(token)
+  errors << "Use a password with at least 8 characters." if password.to_s.length < 8
+  errors << "Passwords do not match." if confirm_password.to_s != "" && password.to_s != confirm_password.to_s
+  raise errors.join(" ") unless errors.empty?
+
+  digest = password_reset_token_digest(token)
+  users = read_registered_users
+  index = users.find_index do |record|
+    stored_hash = record["passwordResetTokenHash"].to_s
+    expires_at = record["passwordResetExpiresAt"].to_s
+    present?(stored_hash) &&
+      secure_compare(stored_hash, digest) &&
+      present?(expires_at) &&
+      Time.parse(expires_at) > Time.now.utc
+  rescue ArgumentError
+    false
+  end
+
+  raise "Reset link is invalid or expired." unless index
+
+  record = users[index].merge(
+    "passwordHash" => password_digest(password),
+    "updatedAt" => Time.now.utc.iso8601,
+    "passwordResetUsedAt" => Time.now.utc.iso8601
+  )
+  record.delete("passwordResetTokenHash")
+  record.delete("passwordResetExpiresAt")
+  record.delete("passwordResetRequestedAt")
+  users[index] = record
+  write_registered_users(users)
+
+  public_user_from_record(record)
 end
 
 def public_user_from_record(record)
@@ -511,7 +595,7 @@ def exchange_amazon_oauth_code(code, request)
 end
 
 def amazon_oauth_callback_payload(request)
-  raise "Amazon Business OAuth is not configured. Set the Amazon Business application ID, client ID, and client secret on the server." unless amazon_oauth_configured?
+  raise "Amazon Business connection is not configured. Set the Amazon Business application ID, client ID, and client secret on the server." unless amazon_oauth_configured?
 
   expected_state = request_cookies(request)[AMAZON_OAUTH_STATE_COOKIE].to_s
   actual_state = request.query["state"].to_s
@@ -519,11 +603,11 @@ def amazon_oauth_callback_payload(request)
   raise "Amazon authorization was canceled or denied." if present?(request.query["error"])
 
   code = request.query["code"].to_s.strip
-  raise "Amazon did not return an OAuth code." if code.empty?
+  raise "Amazon did not return the temporary connection code." if code.empty?
 
   token = exchange_amazon_oauth_code(code, request)
   refresh_token = token.fetch("refresh_token", "").to_s.strip
-  raise "Amazon did not return a refresh token." if refresh_token.empty?
+  raise "Amazon did not approve a reusable workspace connection." if refresh_token.empty?
 
   {
     type: "giftflow-amazon-oauth",
@@ -543,7 +627,7 @@ def amazon_oauth_result_page(request, response, payload)
   response["Set-Cookie"] = clear_amazon_oauth_state_cookie
   title = payload[:ok] || payload["ok"] ? "Amazon connected" : "Amazon connection failed"
   message = payload[:ok] || payload["ok"] ?
-    "Amazon Business sent a refresh token back to GiftFlow. You can close this window." :
+    "Amazon Business approved the GiftFlow workspace connection. You can close this window." :
     (payload[:error] || payload["error"] || "Amazon Business could not connect.").to_s
   response.body = <<~HTML
     <!doctype html>
@@ -917,6 +1001,30 @@ server.mount_proc("/api/auth/login") do |request, response|
   end
 end
 
+server.mount_proc("/api/auth/password-reset/request") do |request, response|
+  begin
+    payload = JSON.parse(request.body.to_s)
+    json_response(response, create_password_reset_request(payload["email"], request))
+  rescue JSON::ParserError
+    json_response(response, { ok: false, errors: ["Request body must be valid JSON."] }, 400)
+  rescue StandardError => error
+    json_response(response, { ok: false, errors: [error.message] }, 400)
+  end
+end
+
+server.mount_proc("/api/auth/password-reset/confirm") do |request, response|
+  begin
+    payload = JSON.parse(request.body.to_s)
+    user = reset_password_with_token(payload["token"], payload["password"], payload["confirmPassword"])
+    response["Set-Cookie"] = session_cookie(user)
+    json_response(response, { ok: true, user: user })
+  rescue JSON::ParserError
+    json_response(response, { ok: false, errors: ["Request body must be valid JSON."] }, 400)
+  rescue StandardError => error
+    json_response(response, { ok: false, errors: [error.message] }, 400)
+  end
+end
+
 server.mount_proc("/api/auth/onboarding") do |request, response|
   user = require_user(request, response)
   next unless user
@@ -967,7 +1075,7 @@ server.mount_proc("/api/amazon/oauth/start") do |request, response|
     amazon_oauth_result_page(request, response, {
       type: "giftflow-amazon-oauth",
       ok: false,
-      error: "Amazon Business OAuth is not configured. Add AMAZON_BUSINESS_APPLICATION_ID, AMAZON_BUSINESS_CLIENT_ID, and AMAZON_BUSINESS_CLIENT_SECRET on the server."
+      error: "Amazon Business connection is not configured. Add AMAZON_BUSINESS_APPLICATION_ID, AMAZON_BUSINESS_CLIENT_ID, and AMAZON_BUSINESS_CLIENT_SECRET on the server."
     })
     next
   end
@@ -998,7 +1106,7 @@ server.mount_proc("/api/amazon/oauth/exchange") do |request, response|
       json_response(response, {
         type: "giftflow-amazon-oauth",
         ok: false,
-        errors: ["Amazon Business OAuth is not configured. Add the Amazon Business application ID, client ID, and client secret on the server."]
+        errors: ["Amazon Business connection is not configured. Add the Amazon Business application ID, client ID, and client secret on the server."]
       }, 422)
       next
     end
@@ -1009,14 +1117,14 @@ server.mount_proc("/api/amazon/oauth/exchange") do |request, response|
       json_response(response, {
         type: "giftflow-amazon-oauth",
         ok: false,
-        errors: ["Paste the OAuth code from the Amazon redirect URL."]
+        errors: ["Paste the temporary code from the Amazon callback URL."]
       }, 400)
       next
     end
 
     token = exchange_amazon_oauth_code(code, request)
     refresh_token = token.fetch("refresh_token", "").to_s.strip
-    raise "Amazon did not return a refresh token." if refresh_token.empty?
+    raise "Amazon did not approve a reusable workspace connection." if refresh_token.empty?
 
     json_response(response, {
       type: "giftflow-amazon-oauth",

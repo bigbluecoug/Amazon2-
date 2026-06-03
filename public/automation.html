@@ -25,13 +25,13 @@
       <section class="automation-hero">
         <div>
           <p class="eyebrow"><span class="panel-step-badge">05</span> Amazon Business automation</p>
-          <h1>Connect Amazon without digging through the campaign builder.</h1>
-          <p class="lede">This console is connected to your GiftFlow workspace and focuses only on Amazon Business setup, refresh-token capture, and queue readiness.</p>
+          <h1>Make Amazon setup feel like a normal workspace step.</h1>
+          <p class="lede">Admins connect Amazon once. Everyone else can prepare recipients, approve gifts, and run the send queue without touching API settings.</p>
         </div>
         <div class="automation-status-strip" aria-label="Automation setup status">
-          <span id="authStateBadge">Checking sign-in</span>
-          <span id="setupStateBadge">Checking setup</span>
-          <span id="tokenStateBadge">No token saved</span>
+          <span id="authStateBadge">Checking workspace</span>
+          <span id="setupStateBadge">Checking admin setup</span>
+          <span id="tokenStateBadge">Amazon not connected</span>
         </div>
       </section>
 
@@ -39,52 +39,79 @@
         <section class="panel automation-connect-panel">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow">Refresh token</p>
-              <h2>Authorize the Amazon Business app.</h2>
+              <p class="eyebrow">Guided setup</p>
+              <h2>Connect Amazon once, then keep the team out of the technical details.</h2>
             </div>
             <button class="button button-dark" id="connectAmazonButton" type="button">Connect Amazon Business</button>
           </div>
 
           <div class="automation-result is-visible" id="automationStatus" role="status" aria-live="polite">
             <strong>Checking setup</strong>
-            <p>GiftFlow is checking the Amazon Business OAuth settings on the server.</p>
+            <p>GiftFlow is checking whether the workspace is ready for Amazon connection.</p>
           </div>
 
-          <div class="form-grid two-col compact automation-settings">
-            <label class="full-span">
-              <span>Callback URL for Amazon SPP</span>
-              <div class="copy-row">
-                <input id="amazonRedirectUri" type="url" readonly>
-                <button class="button button-light" id="copyRedirectButton" type="button">Copy</button>
+          <div class="automation-setup-list" aria-label="Amazon automation setup steps">
+            <article id="serverSetupStep">
+              <span>1</span>
+              <div>
+                <strong>Admin setup is saved on Forge</strong>
+                <p id="serverSetupDetail">GiftFlow is checking the private Amazon app settings.</p>
               </div>
-            </label>
-            <label>
-              <span>Marketplace ID</span>
-              <input id="amazonMarketplace" type="text" placeholder="ATVPDKIKX0DER">
-            </label>
-            <label>
-              <span>Client ID</span>
-              <input id="amazonClientId" type="password" autocomplete="off">
-            </label>
-            <label class="full-span">
-              <span>Refresh token</span>
-              <input id="amazonRefreshToken" type="password" autocomplete="off" placeholder="Connect Amazon Business to fill this">
-            </label>
-            <label class="full-span">
-              <span>API endpoint</span>
-              <input id="amazonEndpoint" type="url" placeholder="https://api.business.amazon.com">
-            </label>
+            </article>
+            <article id="amazonConnectionStep">
+              <span>2</span>
+              <div>
+                <strong>Amazon Business account is connected</strong>
+                <p id="amazonConnectionDetail">An Amazon Business admin only needs to approve this once.</p>
+              </div>
+            </article>
+            <article id="teamQueueStep">
+              <span>3</span>
+              <div>
+                <strong>Team members use the send queue</strong>
+                <p id="teamQueueDetail">No one needs to copy tokens, endpoints, or app IDs during normal use.</p>
+              </div>
+            </article>
           </div>
 
-          <details class="credential-guide" open>
-            <summary>Manual fallback if Amazon shows you a code</summary>
-            <div class="manual-code-box">
-              <p>Amazon's code is valid for about five minutes. Paste only the value after <code>code=</code>, or paste the full redirect URL and GiftFlow will extract the code.</p>
+          <details class="credential-guide advanced-api-panel">
+            <summary>Admin setup details</summary>
+            <div class="form-grid two-col compact automation-settings">
+              <label class="full-span">
+                <span>Callback URL for Amazon setup</span>
+                <div class="copy-row">
+                  <input id="amazonRedirectUri" type="url" readonly>
+                  <button class="button button-light" id="copyRedirectButton" type="button">Copy</button>
+                </div>
+              </label>
               <label>
-                <span>OAuth code or redirect URL</span>
+                <span>Marketplace ID</span>
+                <input id="amazonMarketplace" type="text" placeholder="ATVPDKIKX0DER">
+              </label>
+              <label>
+                <span>Client ID</span>
+                <input id="amazonClientId" type="password" autocomplete="off">
+              </label>
+              <label class="full-span">
+                <span>Refresh token</span>
+                <input id="amazonRefreshToken" type="password" autocomplete="off" placeholder="Filled after Amazon approves access">
+              </label>
+              <label class="full-span">
+                <span>Amazon Business endpoint</span>
+                <input id="amazonEndpoint" type="url" placeholder="https://na.business-api.amazon.com">
+              </label>
+            </div>
+          </details>
+
+          <details class="credential-guide">
+            <summary>Troubleshooting: paste Amazon's temporary code</summary>
+            <div class="manual-code-box">
+              <p>Most users will never need this. If Amazon shows a callback page instead of returning here, paste the full callback URL and GiftFlow will finish the connection.</p>
+              <label>
+                <span>Amazon callback URL or temporary code</span>
                 <textarea id="manualAmazonCode" rows="4" placeholder="https://amazon2-momyzfei.on-forge.com/api/amazon/oauth/callback?state=...&code=..."></textarea>
               </label>
-              <button class="button button-dark" id="exchangeCodeButton" type="button">Exchange pasted code</button>
+              <button class="button button-dark" id="exchangeCodeButton" type="button">Finish connection</button>
             </div>
           </details>
         </section>
@@ -113,7 +140,7 @@
           <div class="automation-actions">
             <a class="button button-light" href="/#sequence">Edit gift sequence</a>
             <a class="button button-light" href="/#prospects">Edit prospects</a>
-            <button class="button button-dark" id="markApiReadyButton" type="button">Use API-ready mode</button>
+            <button class="button button-dark" id="enableQueueButton" type="button">Enable Amazon send queue</button>
           </div>
           <p class="automation-note" id="giftflowConnectionNote">Changes here save to the same browser workspace used by GiftFlow.</p>
         </aside>
@@ -121,29 +148,29 @@
 
       <section class="section automation-doc-steps">
         <div>
-          <p class="eyebrow">Amazon checklist</p>
-          <h2>What must match before Amazon will return a token.</h2>
+          <p class="eyebrow">Team workflow</p>
+          <h2>What people do after the admin connection is finished.</h2>
         </div>
         <div class="intro-step-grid">
           <article>
             <span>01</span>
-            <strong>SPP values on Forge</strong>
-            <p>Add Application ID, LWA Client ID, and LWA Client Secret to the Forge environment.</p>
+            <strong>Add or import prospects</strong>
+            <p>Team members only need names, emails, companies, and shipping addresses.</p>
           </article>
           <article>
             <span>02</span>
-            <strong>Exact callback URL</strong>
-            <p>The callback URL in SPP must match the URL shown in this console, character for character.</p>
+            <strong>Approve the gift sequence</strong>
+            <p>GiftFlow locks the gift, message, quantity, and send date before anything can enter the queue.</p>
           </article>
           <article>
             <span>03</span>
-            <strong>Amazon Business admin</strong>
-            <p>Authorize with an admin account for all legal entities under the Amazon Business account.</p>
+            <strong>Process due gifts</strong>
+            <p>The workspace creates deduped order records so the same person and gift are not queued twice.</p>
           </article>
           <article>
             <span>04</span>
-            <strong>Five-minute code</strong>
-            <p>If you copy a code manually, exchange it immediately before it expires.</p>
+            <strong>Review before live sends</strong>
+            <p>The current connector prepares orders for the live Amazon bridge and keeps accidental sends from happening.</p>
           </article>
         </div>
         <div class="credential-links automation-doc-links">

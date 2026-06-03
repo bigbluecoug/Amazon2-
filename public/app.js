@@ -1,5 +1,6 @@
 const storeKey = "giftflow-studio-state-v1";
 const amazonOAuthResultKey = "giftflow-amazon-oauth-result";
+const defaultAmazonEndpoint = "https://na.business-api.amazon.com";
 const demoAuthEmail = "team@giftflow.local";
 const demoAuthPassword = "giftflow-demo";
 const affiliateIdeas = [
@@ -115,7 +116,7 @@ const demoState = () => ({
     marketplace: "",
     clientId: "",
     refreshToken: "",
-    endpoint: "https://api.business.amazon.com"
+    endpoint: defaultAmazonEndpoint
   },
   associates: {
     tag: "",
@@ -142,15 +143,19 @@ let currentSlide = 0;
 let authConfig = null;
 let currentUser = null;
 let amazonConnectionConfig = null;
+let pendingPasswordResetToken = "";
 
 async function initAuth() {
   const authMessage = consumeAuthMessage();
+  const resetToken = consumePasswordResetToken();
   try {
     const response = await fetch("/api/auth/config", { credentials: "same-origin" });
     authConfig = await response.json();
     currentUser = authConfig.user || null;
 
-    if (currentUser) {
+    if (resetToken) {
+      showPasswordResetConfirm(resetToken);
+    } else if (currentUser) {
       routeAuthenticatedUser();
     } else if (authMessage) {
       showSignIn(authMessage);
@@ -166,7 +171,9 @@ async function initAuth() {
       googleLoginEnabled: false,
       demoLoginEnabled: false
     };
-    if (authMessage) {
+    if (resetToken) {
+      showPasswordResetConfirm(resetToken);
+    } else if (authMessage) {
       showSignIn(authMessage);
     } else {
       showLanding();
@@ -185,15 +192,33 @@ function consumeAuthMessage() {
   return message;
 }
 
+function consumePasswordResetToken() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("resetToken") || "";
+  if (token) {
+    params.delete("resetToken");
+    const query = params.toString();
+    history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+  }
+  return token;
+}
+
+function hideAuthPanels() {
+  byId("signInPanel").hidden = true;
+  byId("createAccountPanel").hidden = true;
+  byId("passwordResetRequestPanel").hidden = true;
+  byId("passwordResetConfirmPanel").hidden = true;
+  byId("onboardingPanel").hidden = true;
+}
+
 function showLanding() {
   byId("landingHeader").hidden = false;
   byId("landingPage").hidden = false;
   byId("appHeader").hidden = true;
   byId("appShell").hidden = true;
   byId("authGate").hidden = true;
+  hideAuthPanels();
   byId("signInPanel").hidden = false;
-  byId("createAccountPanel").hidden = true;
-  byId("onboardingPanel").hidden = true;
 }
 
 function showSignIn(message = "") {
@@ -202,12 +227,12 @@ function showSignIn(message = "") {
   byId("appHeader").hidden = true;
   byId("appShell").hidden = true;
   byId("authGate").hidden = false;
+  hideAuthPanels();
   byId("signInPanel").hidden = false;
-  byId("createAccountPanel").hidden = true;
-  byId("onboardingPanel").hidden = true;
   const passwordLoginEnabled = Boolean(authConfig?.accountLoginEnabled || authConfig?.passwordLoginEnabled);
   byId("passwordLoginFields").hidden = !passwordLoginEnabled;
   byId("passwordSignInButton").hidden = !passwordLoginEnabled;
+  byId("showPasswordResetButton").hidden = !authConfig?.accountLoginEnabled;
   byId("showCreateAccountButton").hidden = !authConfig?.accountRegistrationEnabled;
   byId("demoLoginButton").hidden = !authConfig?.demoLoginEnabled;
   byId("authEmail").required = passwordLoginEnabled;
@@ -252,11 +277,41 @@ function showCreateAccount(message = "") {
   byId("appHeader").hidden = true;
   byId("appShell").hidden = true;
   byId("authGate").hidden = false;
-  byId("signInPanel").hidden = true;
+  hideAuthPanels();
   byId("createAccountPanel").hidden = false;
-  byId("onboardingPanel").hidden = true;
   byId("createAccountStatus").textContent = message || "Use at least 8 characters for your password.";
   byId("createName").focus();
+}
+
+function showPasswordResetRequest(message = "") {
+  byId("landingHeader").hidden = true;
+  byId("landingPage").hidden = true;
+  byId("appHeader").hidden = true;
+  byId("appShell").hidden = true;
+  byId("authGate").hidden = false;
+  hideAuthPanels();
+  byId("passwordResetRequestPanel").hidden = false;
+  byId("passwordResetRequestStatus").textContent = message || "Reset links expire after 30 minutes.";
+  const linkBox = byId("passwordResetLinkBox");
+  linkBox.hidden = true;
+  linkBox.textContent = "";
+  if (fieldValue("authEmail")) setValue("resetEmail", fieldValue("authEmail"));
+  byId("resetEmail").focus();
+}
+
+function showPasswordResetConfirm(token, message = "") {
+  pendingPasswordResetToken = token || "";
+  byId("landingHeader").hidden = true;
+  byId("landingPage").hidden = true;
+  byId("appHeader").hidden = true;
+  byId("appShell").hidden = true;
+  byId("authGate").hidden = false;
+  hideAuthPanels();
+  byId("passwordResetConfirmPanel").hidden = false;
+  byId("passwordResetConfirmStatus").textContent = message || "This reset link can only be used once.";
+  byId("newPassword").value = "";
+  byId("confirmNewPassword").value = "";
+  byId("newPassword").focus();
 }
 
 function routeAuthenticatedUser() {
@@ -273,8 +328,7 @@ function showOnboarding() {
   byId("appHeader").hidden = true;
   byId("appShell").hidden = true;
   byId("authGate").hidden = false;
-  byId("signInPanel").hidden = true;
-  byId("createAccountPanel").hidden = true;
+  hideAuthPanels();
   byId("onboardingPanel").hidden = false;
 }
 
@@ -349,6 +403,67 @@ async function submitCreateAccount(event) {
   }
 
   currentUser = payload.user;
+  routeAuthenticatedUser();
+}
+
+async function submitPasswordResetRequest(event) {
+  event.preventDefault();
+  if (!fieldValue("resetEmail")) {
+    byId("passwordResetRequestStatus").textContent = "Enter your workspace email address.";
+    return;
+  }
+
+  byId("passwordResetRequestStatus").textContent = "Creating reset instructions...";
+  const linkBox = byId("passwordResetLinkBox");
+  linkBox.hidden = true;
+  linkBox.textContent = "";
+
+  const result = await fetch("/api/auth/password-reset/request", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: fieldValue("resetEmail") })
+  });
+  const payload = await result.json();
+
+  if (!payload.ok) {
+    byId("passwordResetRequestStatus").textContent = payload.errors?.join(" ") || "Could not create reset instructions.";
+    return;
+  }
+
+  byId("passwordResetRequestStatus").textContent = payload.message || "If that account exists, reset instructions will be available shortly.";
+  if (payload.resetUrl) {
+    const link = document.createElement("a");
+    link.href = payload.resetUrl;
+    link.textContent = "Open reset form";
+    linkBox.textContent = "Local reset link: ";
+    linkBox.appendChild(link);
+    linkBox.hidden = false;
+  }
+}
+
+async function submitPasswordResetConfirm(event) {
+  event.preventDefault();
+  byId("passwordResetConfirmStatus").textContent = "Saving your new password...";
+  const result = await fetch("/api/auth/password-reset/confirm", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      token: pendingPasswordResetToken,
+      password: byId("newPassword").value,
+      confirmPassword: byId("confirmNewPassword").value
+    })
+  });
+  const payload = await result.json();
+
+  if (!payload.ok) {
+    byId("passwordResetConfirmStatus").textContent = payload.errors?.join(" ") || "Could not reset that password.";
+    return;
+  }
+
+  currentUser = payload.user;
+  pendingPasswordResetToken = "";
   routeAuthenticatedUser();
 }
 
@@ -431,7 +546,13 @@ function loadState() {
   if (!raw) return demoState();
 
   try {
-    return { ...demoState(), ...JSON.parse(raw) };
+    const fallback = demoState();
+    const parsed = { ...fallback, ...JSON.parse(raw) };
+    parsed.amazon = { ...fallback.amazon, ...(parsed.amazon || {}) };
+    if (parsed.amazon.endpoint === "https://api.business.amazon.com") {
+      parsed.amazon.endpoint = defaultAmazonEndpoint;
+    }
+    return parsed;
   } catch (_error) {
     return demoState();
   }
@@ -657,10 +778,10 @@ function renderStatus() {
 
   const mode = state.execution.amazonMode || "queue-only";
   byId("amazonModeStatus").textContent = {
-    "queue-only": "Queue only",
-    "sandbox": "Sandbox",
-    "amazon-business-api": "API ready"
-  }[mode] || "Queue only";
+    "queue-only": "Review queue",
+    "sandbox": "Test run",
+    "amazon-business-api": "Connected queue"
+  }[mode] || "Review queue";
 
   const upcoming = state.steps
     .filter((step) => step.sendDate)
@@ -1142,10 +1263,10 @@ function applyAmazonConnectionConfig() {
 
   if (amazonConnectionConfig?.configured) {
     status.textContent = state.amazon.refreshToken
-      ? "Amazon Business is connected. Refresh token is present."
-      : "Amazon Business OAuth is ready. Connect as the Amazon Business admin to receive a refresh token.";
+      ? "Amazon Business is connected. The team can use the send queue without API settings."
+      : "Admin setup is ready. Connect once as the Amazon Business admin.";
   } else {
-    status.textContent = `Amazon Business OAuth needs server settings: ${missing.join(", ")}.`;
+    status.textContent = `Admin setup still needs private Forge settings: ${missing.join(", ")}.`;
   }
 
   silentSave();
@@ -1164,8 +1285,8 @@ async function connectAmazonBusiness() {
   if (!amazonConnectionConfig?.configured) {
     if (popup) popup.close();
     applyAmazonConnectionConfig();
-    const missing = amazonConnectionConfig?.missing?.join(", ") || "Amazon Business OAuth settings";
-    showResult(`Amazon Business is not ready yet. Add these Forge environment variables: ${missing}.`, false);
+    const missing = amazonConnectionConfig?.missing?.join(", ") || "private Amazon app settings";
+    showResult(`Amazon Business is not ready yet. A workspace admin needs to finish these Forge settings: ${missing}.`, false);
     return;
   }
 
@@ -1176,7 +1297,7 @@ async function connectAmazonBusiness() {
 
   popup.location.href = "/api/amazon/oauth/start";
   popup.focus();
-  byId("amazonConnectionStatus").textContent = "Amazon authorization window opened. Sign in as the Amazon Business admin and select Allow.";
+  byId("amazonConnectionStatus").textContent = "Amazon approval window opened. Sign in as the Amazon Business admin and select Allow.";
 }
 
 function receiveAmazonOAuthMessage(event) {
@@ -1202,7 +1323,7 @@ function applyAmazonOAuthResult(payload) {
   if (!payload || payload.type !== "giftflow-amazon-oauth") return;
 
   if (!payload.ok) {
-    const message = payload.error || "Amazon Business did not return a refresh token.";
+    const message = payload.error || "Amazon Business did not approve the workspace connection.";
     byId("amazonConnectionStatus").textContent = message;
     showResult(message, false);
     return;
@@ -1215,9 +1336,9 @@ function applyAmazonOAuthResult(payload) {
   setValue("amazonMode", "amazon-business-api");
   syncSettingsFromInputs();
   silentSave();
-  byId("amazonConnectionStatus").textContent = "Amazon Business connected. Refresh token saved in this browser workspace.";
+  byId("amazonConnectionStatus").textContent = "Amazon Business connected. GiftFlow saved the private connection for this browser workspace.";
   renderStatus();
-  showResult("Amazon Business returned a refresh token. GiftFlow can now mark due orders as ready for the live connector.", true);
+  showResult("Amazon Business is connected. Team members can prepare and queue approved gifts without handling API credentials.", true);
 }
 
 function showResult(message, success) {
@@ -1348,7 +1469,10 @@ function wireButtons() {
     showSignIn();
   });
   byId("showCreateAccountButton").addEventListener("click", () => showCreateAccount());
+  byId("showPasswordResetButton").addEventListener("click", () => showPasswordResetRequest());
   byId("showSignInButton").addEventListener("click", () => showSignIn());
+  byId("resetBackToSignInButton").addEventListener("click", () => showSignIn());
+  byId("resetConfirmBackToSignInButton").addEventListener("click", () => showSignIn());
   byId("demoLoginButton").addEventListener("click", openDemoWorkspace);
   byId("backToIntroButton").addEventListener("click", showLanding);
   byId("createBackToIntroButton").addEventListener("click", showLanding);
@@ -1358,6 +1482,8 @@ function wireButtons() {
   byId("connectAmazonButton").addEventListener("click", connectAmazonBusiness);
   byId("signInPanel").addEventListener("submit", submitSignIn);
   byId("createAccountPanel").addEventListener("submit", submitCreateAccount);
+  byId("passwordResetRequestPanel").addEventListener("submit", submitPasswordResetRequest);
+  byId("passwordResetConfirmPanel").addEventListener("submit", submitPasswordResetConfirm);
   byId("onboardingPanel").addEventListener("submit", submitOnboarding);
   window.addEventListener("message", receiveAmazonOAuthMessage);
   document.querySelectorAll(".need-help-link").forEach((link) => {

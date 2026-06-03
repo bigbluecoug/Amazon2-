@@ -10,6 +10,7 @@ define('DEFAULT_AUTH_EMAIL', 'team@giftflow.local');
 define('DEFAULT_AUTH_PASSWORD', 'giftflow-demo');
 define('SESSION_COOKIE', 'giftflow_session');
 define('SESSION_MAX_AGE', 60 * 60 * 24 * 7);
+define('PASSWORD_RESET_MAX_AGE', 60 * 30);
 define('GOOGLE_STATE_COOKIE', 'giftflow_google_state');
 define('GOOGLE_STATE_MAX_AGE', 600);
 define('GOOGLE_AUTH_ENDPOINT', 'https://accounts.google.com/o/oauth2/v2/auth');
@@ -175,7 +176,7 @@ function amazon_marketplace_id(): string
 
 function amazon_api_endpoint(): string
 {
-    return rtrim(trim(env_value('AMAZON_BUSINESS_API_ENDPOINT', 'https://api.business.amazon.com')), '/');
+    return rtrim(trim(env_value('AMAZON_BUSINESS_API_ENDPOINT', 'https://na.business-api.amazon.com')), '/');
 }
 
 function amazon_redirect_uri(): string
@@ -428,6 +429,112 @@ function verify_password_digest(string $password, string $digest): bool
 
     $actual = hash_pbkdf2('sha256', $password, $salt, $iterations, strlen($expected), true);
     return hash_equals($expected, $actual);
+}
+
+function password_reset_token_digest(string $token): string
+{
+    return hash('sha256', $token);
+}
+
+function password_reset_link_visible(): bool
+{
+    if (strtolower(trim(env_value('SHOW_PASSWORD_RESET_LINKS', 'false'))) === 'true') {
+        return true;
+    }
+
+    $host = strtolower(explode(':', (string) ($_SERVER['HTTP_HOST'] ?? ''))[0]);
+    return in_array($host, ['127.0.0.1', 'localhost', '::1'], true);
+}
+
+function password_reset_url(string $token): string
+{
+    return app_origin() . '/?resetToken=' . rawurlencode($token);
+}
+
+function create_password_reset_request($email): array
+{
+    $message = 'If that account exists, reset instructions will be available shortly.';
+    $normalizedEmail = normalize_email($email);
+    $user = find_registered_user_by_email($normalizedEmail);
+    $result = ['ok' => true, 'message' => $message];
+    if ($user === null) {
+        return $result;
+    }
+
+    $token = base64url_encode(random_bytes(32));
+    $resetUrl = password_reset_url($token);
+    $users = read_registered_users();
+    $index = null;
+    foreach ($users as $userIndex => $record) {
+        if (normalize_email($record['email'] ?? '') === $normalizedEmail) {
+            $index = $userIndex;
+            break;
+        }
+    }
+
+    if ($index === null) {
+        return $result;
+    }
+
+    $users[$index]['passwordResetTokenHash'] = password_reset_token_digest($token);
+    $users[$index]['passwordResetRequestedAt'] = iso_now();
+    $users[$index]['passwordResetExpiresAt'] = gmdate('Y-m-d\TH:i:s\Z', time() + PASSWORD_RESET_MAX_AGE);
+    $users[$index]['passwordResetUsedAt'] = '';
+    write_registered_users($users);
+
+    error_log('[GiftFlow] Password reset link for ' . $normalizedEmail . ': ' . $resetUrl);
+
+    if (password_reset_link_visible()) {
+        $result['message'] = 'Use the reset link below to choose a new password.';
+        $result['resetUrl'] = $resetUrl;
+    }
+
+    return $result;
+}
+
+function reset_password_with_token($token, $password, $confirmPassword): array
+{
+    $cleanToken = trim((string) $token);
+    $passwordValue = (string) $password;
+    $confirmValue = (string) $confirmPassword;
+    $errors = [];
+
+    if ($cleanToken === '') {
+        $errors[] = 'Reset link is missing or expired.';
+    }
+    if (strlen($passwordValue) < 8) {
+        $errors[] = 'Use a password with at least 8 characters.';
+    }
+    if ($confirmValue !== '' && $passwordValue !== $confirmValue) {
+        $errors[] = 'Passwords do not match.';
+    }
+    if (count($errors) > 0) {
+        throw new InvalidArgumentException(implode(' ', $errors));
+    }
+
+    $digest = password_reset_token_digest($cleanToken);
+    $users = read_registered_users();
+    $index = null;
+    foreach ($users as $userIndex => $record) {
+        $storedHash = (string) ($record['passwordResetTokenHash'] ?? '');
+        $expiresAt = strtotime((string) ($record['passwordResetExpiresAt'] ?? ''));
+        if ($storedHash !== '' && hash_equals($storedHash, $digest) && $expiresAt !== false && $expiresAt > time()) {
+            $index = $userIndex;
+            break;
+        }
+    }
+
+    if ($index === null) {
+        throw new InvalidArgumentException('Reset link is invalid or expired.');
+    }
+
+    $users[$index]['passwordHash'] = password_digest($passwordValue);
+    $users[$index]['updatedAt'] = iso_now();
+    $users[$index]['passwordResetUsedAt'] = iso_now();
+    unset($users[$index]['passwordResetTokenHash'], $users[$index]['passwordResetExpiresAt'], $users[$index]['passwordResetRequestedAt']);
+    write_registered_users($users);
+
+    return public_user_from_record($users[$index]);
 }
 
 function public_user_from_record(array $record): array
@@ -765,7 +872,7 @@ function exchange_amazon_oauth_code(string $code): array
 function amazon_oauth_callback_payload(): array
 {
     if (!amazon_oauth_configured()) {
-        throw new RuntimeException('Amazon Business OAuth is not configured. Set the Amazon Business application ID, client ID, and client secret on Forge.');
+        throw new RuntimeException('Amazon Business connection is not configured. Set the Amazon Business application ID, client ID, and client secret on Forge.');
     }
 
     $expectedState = (string) ($_COOKIE[AMAZON_OAUTH_STATE_COOKIE] ?? '');
@@ -780,13 +887,13 @@ function amazon_oauth_callback_payload(): array
 
     $code = trim((string) ($_GET['code'] ?? ''));
     if ($code === '') {
-        throw new RuntimeException('Amazon did not return an OAuth code.');
+        throw new RuntimeException('Amazon did not return the temporary connection code.');
     }
 
     $token = exchange_amazon_oauth_code($code);
     $refreshToken = trim((string) ($token['refresh_token'] ?? ''));
     if ($refreshToken === '') {
-        throw new RuntimeException('Amazon did not return a refresh token.');
+        throw new RuntimeException('Amazon did not approve a reusable workspace connection.');
     }
 
     return [
@@ -810,7 +917,7 @@ function amazon_oauth_result_page(array $payload): void
     $origin = json_encode(app_origin(), JSON_UNESCAPED_SLASHES);
     $title = $payload['ok'] ? 'Amazon connected' : 'Amazon connection failed';
     $message = $payload['ok']
-        ? 'Amazon Business sent a refresh token back to GiftFlow. You can close this window.'
+        ? 'Amazon Business approved the GiftFlow workspace connection. You can close this window.'
         : (string) ($payload['error'] ?? 'Amazon Business could not connect.');
     echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
     echo '<title>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</title>';
@@ -1324,6 +1431,36 @@ function handle_request(): void
         return;
     }
 
+    if ($path === '/api/auth/password-reset/request') {
+        try {
+            $payload = read_json_body();
+            json_response(create_password_reset_request($payload['email'] ?? ''));
+        } catch (InvalidArgumentException $error) {
+            json_response(['ok' => false, 'errors' => [$error->getMessage()]], 400);
+        } catch (Throwable $error) {
+            json_response(['ok' => false, 'errors' => [$error->getMessage()]], 400);
+        }
+        return;
+    }
+
+    if ($path === '/api/auth/password-reset/confirm') {
+        try {
+            $payload = read_json_body();
+            $user = reset_password_with_token(
+                $payload['token'] ?? '',
+                $payload['password'] ?? '',
+                $payload['confirmPassword'] ?? ''
+            );
+            set_session_cookie($user);
+            json_response(['ok' => true, 'user' => $user]);
+        } catch (InvalidArgumentException $error) {
+            json_response(['ok' => false, 'errors' => [$error->getMessage()]], 400);
+        } catch (Throwable $error) {
+            json_response(['ok' => false, 'errors' => [$error->getMessage()]], 400);
+        }
+        return;
+    }
+
     if ($path === '/api/auth/onboarding') {
         $user = require_user();
         if ($user === null) {
@@ -1383,7 +1520,7 @@ function handle_request(): void
             amazon_oauth_result_page([
                 'type' => 'giftflow-amazon-oauth',
                 'ok' => false,
-                'error' => 'Amazon Business OAuth is not configured. Add AMAZON_BUSINESS_APPLICATION_ID, AMAZON_BUSINESS_CLIENT_ID, and AMAZON_BUSINESS_CLIENT_SECRET on Forge.',
+                'error' => 'Amazon Business connection is not configured. Add AMAZON_BUSINESS_APPLICATION_ID, AMAZON_BUSINESS_CLIENT_ID, and AMAZON_BUSINESS_CLIENT_SECRET on Forge.',
             ]);
             return;
         }
@@ -1417,7 +1554,7 @@ function handle_request(): void
                 json_response([
                     'type' => 'giftflow-amazon-oauth',
                     'ok' => false,
-                    'errors' => ['Amazon Business OAuth is not configured. Add the Amazon Business application ID, client ID, and client secret on Forge.'],
+                    'errors' => ['Amazon Business connection is not configured. Add the Amazon Business application ID, client ID, and client secret on Forge.'],
                 ], 422);
                 return;
             }
@@ -1428,7 +1565,7 @@ function handle_request(): void
                 json_response([
                     'type' => 'giftflow-amazon-oauth',
                     'ok' => false,
-                    'errors' => ['Paste the OAuth code from the Amazon redirect URL.'],
+                    'errors' => ['Paste the temporary code from the Amazon callback URL.'],
                 ], 400);
                 return;
             }
@@ -1436,7 +1573,7 @@ function handle_request(): void
             $token = exchange_amazon_oauth_code($code);
             $refreshToken = trim((string) ($token['refresh_token'] ?? ''));
             if ($refreshToken === '') {
-                throw new RuntimeException('Amazon did not return a refresh token.');
+                throw new RuntimeException('Amazon did not approve a reusable workspace connection.');
             }
 
             json_response([

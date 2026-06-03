@@ -1,5 +1,6 @@
 const storeKey = "giftflow-studio-state-v1";
 const amazonOAuthResultKey = "giftflow-amazon-oauth-result";
+const defaultAmazonEndpoint = "https://na.business-api.amazon.com";
 
 const today = new Date().toISOString().slice(0, 10);
 let state = loadState();
@@ -20,7 +21,7 @@ function loadState() {
       marketplace: "",
       clientId: "",
       refreshToken: "",
-      endpoint: "https://api.business.amazon.com"
+      endpoint: defaultAmazonEndpoint
     },
     orderHistory: []
   };
@@ -35,6 +36,9 @@ function loadState() {
     parsed.recipients = Array.isArray(parsed.recipients) ? parsed.recipients : [];
     parsed.execution = parsed.execution || fallback.execution;
     parsed.amazon = { ...fallback.amazon, ...(parsed.amazon || {}) };
+    if (parsed.amazon.endpoint === "https://api.business.amazon.com") {
+      parsed.amazon.endpoint = defaultAmazonEndpoint;
+    }
     parsed.orderHistory = Array.isArray(parsed.orderHistory) ? parsed.orderHistory : [];
     return parsed;
   } catch (_error) {
@@ -69,6 +73,57 @@ function showStatus(title, message, success = false) {
   status.innerHTML = `<strong>${escapeHtml(title)}</strong><p>${escapeHtml(message)}</p>`;
 }
 
+function setStepState(id, stateName, detail) {
+  const step = byId(id);
+  if (!step) return;
+
+  step.classList.remove("is-ready", "is-waiting", "is-blocked");
+  step.classList.add(`is-${stateName}`);
+  const detailElement = byId(`${id.replace("Step", "")}Detail`);
+  if (detailElement && detail) {
+    detailElement.textContent = detail;
+  }
+}
+
+function updateSetupSteps() {
+  const hasServerSetup = !!amazonConnectionConfig?.configured;
+  const hasAmazonConnection = !!state.amazon?.refreshToken;
+  const hasApiReadyMode = state.execution?.amazonMode === "amazon-business-api";
+
+  if (amazonConnectionConfig) {
+    const missing = amazonConnectionConfig?.missing || [];
+    setStepState(
+      "serverSetupStep",
+      hasServerSetup ? "ready" : "blocked",
+      hasServerSetup
+        ? "Private Amazon app settings are saved on the server."
+        : `An admin still needs to finish Forge setup${missing.length ? `: ${missing.join(", ")}` : "."}`
+    );
+  } else {
+    setStepState(
+      "serverSetupStep",
+      "waiting",
+      "Sign in so GiftFlow can check the private Amazon app settings."
+    );
+  }
+
+  setStepState(
+    "amazonConnectionStep",
+    hasAmazonConnection ? "ready" : "waiting",
+    hasAmazonConnection
+      ? "Amazon Business approved the workspace connection."
+      : "Click Connect Amazon Business when the admin setup is ready."
+  );
+
+  setStepState(
+    "teamQueueStep",
+    hasAmazonConnection && hasApiReadyMode ? "ready" : "waiting",
+    hasAmazonConnection && hasApiReadyMode
+      ? "The team can use GiftFlow without handling API credentials."
+      : "Enable the Amazon send queue after the account is connected."
+  );
+}
+
 function escapeHtml(value) {
   const div = document.createElement("div");
   div.textContent = value;
@@ -80,7 +135,7 @@ async function loadAuth() {
     const response = await fetch("/api/auth/config", { credentials: "same-origin" });
     const payload = await response.json();
     currentUser = payload.user || null;
-    byId("authStateBadge").textContent = currentUser ? `Signed in as ${currentUser.email}` : "Sign in required";
+    byId("authStateBadge").textContent = currentUser ? "Workspace signed in" : "Sign in required";
     if (!currentUser) {
       showStatus("Sign in required", "Sign in to GiftFlow before connecting Amazon Business.");
       byId("connectAmazonButton").disabled = true;
@@ -113,8 +168,9 @@ async function loadAmazonConnectionConfig() {
 
 function applyAmazonConnectionConfig() {
   const missing = amazonConnectionConfig?.missing || [];
-  byId("connectAmazonButton").textContent = amazonConnectionConfig?.configured ? "Connect Amazon Business" : "Check Amazon setup";
-  byId("setupStateBadge").textContent = amazonConnectionConfig?.configured ? "Server setup ready" : "Missing server setup";
+  byId("connectAmazonButton").textContent = amazonConnectionConfig?.configured ? "Connect Amazon Business" : "Waiting on admin setup";
+  byId("connectAmazonButton").disabled = !amazonConnectionConfig?.configured;
+  byId("setupStateBadge").textContent = amazonConnectionConfig?.configured ? "Admin setup ready" : "Admin setup needed";
   setValue("amazonRedirectUri", amazonConnectionConfig?.redirectUri || "https://amazon2-momyzfei.on-forge.com/api/amazon/oauth/callback");
 
   if (amazonConnectionConfig?.clientId && !fieldValue("amazonClientId")) {
@@ -131,12 +187,13 @@ function applyAmazonConnectionConfig() {
   }
 
   if (amazonConnectionConfig?.configured) {
-    showStatus("Amazon setup ready", "Click Connect Amazon Business, sign in as the Amazon Business admin, and select Allow.", true);
+    showStatus("Ready for Amazon approval", "An Amazon Business admin can connect the account now. Everyone else can keep using GiftFlow normally.", true);
   } else {
-    showStatus("Amazon setup missing", `Add these Forge environment variables: ${missing.join(", ")}.`);
+    showStatus("Admin setup needed", `A workspace admin needs to finish the private Forge settings before users can connect Amazon${missing.length ? `: ${missing.join(", ")}` : "."}`);
   }
 
   renderTokenState();
+  updateSetupSteps();
   saveState();
 }
 
@@ -148,18 +205,24 @@ function renderGiftFlowState() {
   byId("dueGifts").textContent = dueSteps.length;
   byId("queuedOrders").textContent = state.orderHistory.length;
   byId("giftflowConnectionNote").textContent = state.execution?.amazonMode === "amazon-business-api"
-    ? "GiftFlow is set to Amazon Business API ready mode."
-    : "Changes here save to the same browser workspace used by GiftFlow.";
+    ? "Amazon send queue is enabled for this browser workspace."
+    : "Connect Amazon once, then enable the send queue for the team.";
 
   setValue("amazonMarketplace", state.amazon.marketplace);
   setValue("amazonClientId", state.amazon.clientId);
   setValue("amazonRefreshToken", state.amazon.refreshToken);
   setValue("amazonEndpoint", state.amazon.endpoint);
   renderTokenState();
+  updateSetupSteps();
 }
 
 function renderTokenState() {
-  byId("tokenStateBadge").textContent = state.amazon?.refreshToken ? "Refresh token saved" : "No token saved";
+  byId("tokenStateBadge").textContent = state.amazon?.refreshToken ? "Amazon connected" : "Amazon not connected";
+  const enableButton = byId("enableQueueButton");
+  if (enableButton) {
+    enableButton.disabled = !state.amazon?.refreshToken;
+  }
+  updateSetupSteps();
 }
 
 function syncAmazonFields() {
@@ -183,8 +246,8 @@ async function connectAmazonBusiness() {
 
   if (!amazonConnectionConfig?.configured) {
     if (popup) popup.close();
-    const missing = amazonConnectionConfig?.missing?.join(", ") || "Amazon Business OAuth settings";
-    showStatus("Amazon setup missing", `Add these Forge environment variables first: ${missing}.`);
+    const missing = amazonConnectionConfig?.missing?.join(", ") || "private Amazon app settings";
+    showStatus("Admin setup needed", `A workspace admin needs to finish ${missing} before users can connect Amazon.`);
     return;
   }
 
@@ -195,7 +258,7 @@ async function connectAmazonBusiness() {
 
   popup.location.href = "/api/amazon/oauth/start";
   popup.focus();
-  showStatus("Amazon window opened", "Sign in as the Amazon Business admin and select Allow.");
+  showStatus("Amazon approval window opened", "Sign in as the Amazon Business admin and select Allow. GiftFlow will save the connection when Amazon returns.");
 }
 
 function extractAmazonCode(value) {
@@ -213,11 +276,11 @@ function extractAmazonCode(value) {
 async function exchangeManualCode() {
   const code = extractAmazonCode(fieldValue("manualAmazonCode"));
   if (!code) {
-    showStatus("Missing OAuth code", "Paste the code from Amazon or the full callback URL.");
+    showStatus("Missing Amazon code", "Paste the callback URL Amazon showed you, or paste only the temporary code.");
     return;
   }
 
-  showStatus("Exchanging code", "GiftFlow is sending the code to the secure backend. This code expires quickly.");
+  showStatus("Finishing connection", "GiftFlow is sending the temporary code to the secure backend. Amazon codes expire quickly.");
   try {
     const response = await fetch("/api/amazon/oauth/exchange", {
       method: "POST",
@@ -227,7 +290,7 @@ async function exchangeManualCode() {
     });
     const payload = await response.json();
     if (!payload.ok) {
-      const message = payload.errors?.join(" ") || "Amazon did not return a refresh token.";
+      const message = payload.errors?.join(" ") || "Amazon did not return a workspace connection.";
       showStatus("Exchange failed", message);
       return;
     }
@@ -235,7 +298,7 @@ async function exchangeManualCode() {
     applyAmazonOAuthResult(payload);
     byId("manualAmazonCode").value = "";
   } catch (_error) {
-    showStatus("Exchange failed", "GiftFlow could not reach the token exchange route.");
+    showStatus("Connection failed", "GiftFlow could not reach the Amazon connection route.");
   }
 }
 
@@ -262,7 +325,7 @@ function applyAmazonOAuthResult(payload) {
   if (!payload || payload.type !== "giftflow-amazon-oauth") return;
 
   if (!payload.ok) {
-    showStatus("Amazon connection failed", payload.error || payload.errors?.join(" ") || "Amazon Business did not return a refresh token.");
+    showStatus("Amazon connection failed", payload.error || payload.errors?.join(" ") || "Amazon Business did not approve the workspace connection.");
     return;
   }
 
@@ -274,7 +337,7 @@ function applyAmazonOAuthResult(payload) {
   state.execution.amazonMode = "amazon-business-api";
   saveState();
   renderGiftFlowState();
-  showStatus("Amazon Business connected", "Refresh token saved. GiftFlow is now set to Amazon Business API ready mode.", true);
+  showStatus("Amazon Business connected", "The private connection is saved. Team members can use the GiftFlow send queue without seeing API credentials.", true);
 }
 
 async function copyRedirectUri() {
@@ -283,26 +346,26 @@ async function copyRedirectUri() {
 
   try {
     await navigator.clipboard.writeText(value);
-    showStatus("Callback URL copied", "Paste this exact URL into the Amazon SPP app registration.", true);
+    showStatus("Callback URL copied", "Paste this exact URL into the Amazon Business app registration.", true);
   } catch (_error) {
     showStatus("Copy failed", "Select and copy the callback URL manually.");
   }
 }
 
-function markApiReady() {
+function enableAmazonQueue() {
   syncAmazonFields();
   state.execution = state.execution || {};
   state.execution.amazonMode = "amazon-business-api";
   saveState();
   renderGiftFlowState();
-  showStatus("API-ready mode selected", "GiftFlow will mark due orders as ready for the live connector when required Amazon fields are present.", true);
+  showStatus("Amazon send queue enabled", "GiftFlow will prepare approved due gifts for the live Amazon connector without asking users for API details.", true);
 }
 
 function wireEvents() {
   byId("connectAmazonButton").addEventListener("click", connectAmazonBusiness);
   byId("exchangeCodeButton").addEventListener("click", exchangeManualCode);
   byId("copyRedirectButton").addEventListener("click", copyRedirectUri);
-  byId("markApiReadyButton").addEventListener("click", markApiReady);
+  byId("enableQueueButton").addEventListener("click", enableAmazonQueue);
   ["amazonMarketplace", "amazonClientId", "amazonRefreshToken", "amazonEndpoint"].forEach((id) => {
     byId(id).addEventListener("input", syncAmazonFields);
   });

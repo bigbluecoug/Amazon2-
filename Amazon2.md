@@ -83,7 +83,9 @@ The server verifies those credentials before setting a signed, HttpOnly session 
 
 ## Amazon Automation Boundary
 
-The current app supports queue-only and sandbox-style processing. The `amazon-business-api` mode creates records marked `ready_for_live_connector` when credential fields are present, but it does not place live Amazon orders yet.
+The current app supports review-queue and test-run processing. Connected Amazon queue mode creates records marked `ready_for_live_connector` when the workspace has an Amazon Business connection, but it does not place live Amazon orders yet.
+
+The Amazon Business app values should be set once by a workspace admin on Forge. After that, the Amazon Business admin can use `/automation.html` to connect Amazon, and regular team members can run GiftFlow without seeing app IDs, tokens, endpoints, or OAuth codes.
 
 To complete live ordering, connect the processing endpoint to the approved Amazon Business buying workflow for your account, then map each generated `amazonPayload` to that API's order creation request. Keeping this boundary explicit prevents accidental gift sends while campaign setup is still being tested.
 

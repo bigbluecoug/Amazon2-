@@ -87,11 +87,13 @@ ruby server.rb
 
 The server verifies credentials before setting a signed, HttpOnly session cookie. The order-processing API rejects unauthenticated requests. Demo login is disabled unless `ALLOW_DEMO_LOGIN=true` is explicitly set. Do not enable demo login for a shared or live site.
 
+Password reset is available from the sign-in screen for registered accounts. Reset links expire after 30 minutes and are stored server-side as hashes. On local `localhost` or `127.0.0.1`, the reset request can show the link in the browser for testing. On Forge, the app writes the reset link to the server log so a workspace admin can send it to the account owner; set `SHOW_PASSWORD_RESET_LINKS=true` only for a private, trusted testing environment.
+
 ## Amazon Automation Boundary
 
-The current app supports queue-only and sandbox-style processing. The `amazon-business-api` mode creates records marked `ready_for_live_connector` when credential fields are present, but it does not place live Amazon orders yet.
+The current app supports review-queue and test-run processing. Connected Amazon queue mode creates records marked `ready_for_live_connector` when the workspace has an Amazon Business connection, but it does not place live Amazon orders yet.
 
-GiftFlow can help complete the Amazon Business OAuth refresh-token step. After Amazon Business API approval, set these values on Forge:
+GiftFlow keeps the technical setup out of the normal team workflow. One workspace admin sets these private values on Forge after Amazon Business API approval:
 
 ```bash
 AMAZON_BUSINESS_APPLICATION_ID="amzn1.sp.solution.xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
@@ -100,7 +102,7 @@ AMAZON_BUSINESS_CLIENT_SECRET="your-lwa-client-secret"
 AMAZON_BUSINESS_REDIRECT_URI="https://amazon2-momyzfei.on-forge.com/api/amazon/oauth/callback"
 AMAZON_BUSINESS_MARKETPLACE_URL="https://www.amazon.com"
 AMAZON_BUSINESS_MARKETPLACE_ID="ATVPDKIKX0DER"
-AMAZON_BUSINESS_API_ENDPOINT="https://api.business.amazon.com"
+AMAZON_BUSINESS_API_ENDPOINT="https://na.business-api.amazon.com"
 ```
 
 Add this exact redirect URI to the Amazon Business Solution Provider Portal app registration:
@@ -109,13 +111,13 @@ Add this exact redirect URI to the Amazon Business Solution Provider Portal app 
 https://amazon2-momyzfei.on-forge.com/api/amazon/oauth/callback
 ```
 
-Then sign in to GiftFlow and open the dedicated automation console:
+Then the Amazon Business admin signs in to GiftFlow and opens the dedicated automation console:
 
 ```text
 https://amazon2-momyzfei.on-forge.com/automation.html
 ```
 
-Choose **Connect Amazon Business**. The backend exchanges Amazon's OAuth code at the Login With Amazon token endpoint and fills the returned refresh token into the workspace. If Amazon shows you a callback URL instead of returning cleanly, copy the value after `code=` and paste it into the manual exchange box on `/automation.html` before the code expires.
+Choose **Connect Amazon Business** and approve access. GiftFlow saves the private Amazon connection in the workspace so regular team members can use the send queue without seeing app IDs, tokens, endpoints, or OAuth codes. If Amazon shows a callback URL instead of returning cleanly, use the troubleshooting section on `/automation.html` to paste the full callback URL before the temporary code expires.
 
 To complete live ordering, connect the processing endpoint to the approved Amazon Business buying workflow for your account, then map each generated `amazonPayload` to that API's order creation request. Keeping this boundary explicit prevents accidental gift sends while campaign setup is still being tested.
 
