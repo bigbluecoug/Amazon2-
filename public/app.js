@@ -361,7 +361,9 @@ function showApp() {
     loadAmazonConnectionConfig();
     consumeStoredAmazonOAuthResult();
   }
-  byId("campaign").scrollIntoView({ behavior: "smooth", block: "start" });
+  const requestedSection = byId(window.location.hash.replace("#", ""));
+  const visibleRequestedSection = requestedSection && !requestedSection.closest("[hidden]") ? requestedSection : null;
+  (visibleRequestedSection || byId("aiGiftBuilder") || byId("campaign")).scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function requestSignIn(email, password, statusMessage = "Checking credentials...") {
@@ -665,11 +667,41 @@ function markSequenceDirty() {
 function render() {
   renderInstructionSlides();
   renderMetrics();
+  renderConnectedWorkflow();
   renderAffiliateIdeas();
   renderSteps();
   renderRecipients();
   renderHistory();
   renderStatus();
+}
+
+function renderConnectedWorkflow() {
+  const openAiStatus = byId("openAiStatus");
+  const amazonApiStatus = byId("amazonApiStatus");
+  const reviewGateStatus = byId("reviewGateStatus");
+  const workflowNextAction = byId("workflowNextAction");
+  if (!openAiStatus || !amazonApiStatus || !reviewGateStatus || !workflowNextAction) return;
+
+  const enrichedCount = state.steps.filter((step) => step.aiEnrichedUrl).length;
+  const giftCount = state.steps.length;
+  const readyRecipients = state.recipients.filter((recipient) => recipient.readyToSend && completeAddress(recipient)).length;
+  const connectedMode = state.execution.amazonMode === "amazon-business-api" || Boolean(state.amazon?.refreshToken);
+
+  openAiStatus.textContent = enrichedCount
+    ? `${enrichedCount} gift${enrichedCount === 1 ? "" : "s"} AI-filled`
+    : "AI fill ready";
+  amazonApiStatus.textContent = connectedMode ? "Amazon queue connected" : "Review queue active";
+  reviewGateStatus.textContent = sequenceConfirmed() ? "Sequence confirmed" : "Sequence draft";
+
+  if (!giftCount) {
+    workflowNextAction.textContent = "Paste a product URL to start the first gift.";
+  } else if (!readyRecipients) {
+    workflowNextAction.textContent = "Add or review recipients before processing gifts.";
+  } else if (!sequenceConfirmed()) {
+    workflowNextAction.textContent = "Confirm the sequence before the queue runs.";
+  } else {
+    workflowNextAction.textContent = "Ready recipients and confirmed gifts can be processed.";
+  }
 }
 
 function renderAffiliateIdeas() {
@@ -814,6 +846,7 @@ function renderStatus() {
   byId("sequenceConfirmation").textContent = sequenceConfirmed()
     ? "Sequence locked for automation. Editing a gift will move it back to draft."
     : "Any gift edit requires a fresh confirmation before orders can run.";
+  renderConnectedWorkflow();
 }
 
 function renderStepImagePreview(step, node) {
@@ -959,7 +992,7 @@ async function populateAmazonFields(step, node, options = {}) {
   const fillButton = node.querySelector(".fill-amazon-details");
   if (fillButton) {
     fillButton.disabled = true;
-    fillButton.textContent = "Filling...";
+    fillButton.textContent = "AI filling...";
   }
 
   try {
@@ -1025,9 +1058,28 @@ async function populateAmazonFields(step, node, options = {}) {
   } finally {
     if (fillButton) {
       fillButton.disabled = false;
-      fillButton.textContent = "Fill details";
+      fillButton.textContent = "AI fill";
     }
   }
+}
+
+function focusAiGiftBuilder() {
+  if (!state.steps.length) {
+    addStep();
+  }
+
+  byId("sequence").scrollIntoView({ behavior: "smooth", block: "start" });
+  window.setTimeout(() => {
+    const urlInputs = Array.from(document.querySelectorAll('#stepList [data-field="itemUrl"]'));
+    const target = urlInputs.find((input) => !input.value.trim()) || urlInputs[0];
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      window.setTimeout(() => {
+        target.focus();
+        target.select();
+      }, 220);
+    }
+  }, 220);
 }
 
 function parseAmazonUrl(value) {
@@ -1617,6 +1669,9 @@ function wireButtons() {
   byId("heroRunButton").addEventListener("click", processDueGifts);
   byId("logoutButton").addEventListener("click", signOut);
   byId("connectAmazonButton").addEventListener("click", connectAmazonBusiness);
+  document.querySelectorAll("[data-focus-ai-gift]").forEach((button) => {
+    button.addEventListener("click", focusAiGiftBuilder);
+  });
   byId("signInPanel").addEventListener("submit", submitSignIn);
   byId("createAccountPanel").addEventListener("submit", submitCreateAccount);
   byId("passwordResetRequestPanel").addEventListener("submit", submitPasswordResetRequest);
@@ -1641,16 +1696,20 @@ function wireButtons() {
   byId("amazonCredentialGuide").addEventListener("toggle", (event) => {
     if (!event.target.open) event.target.hidden = true;
   });
-  byId("slidePrevButton").addEventListener("click", () => {
-    const slideCount = document.querySelectorAll(".instruction-slide").length;
-    currentSlide = (currentSlide - 1 + slideCount) % slideCount;
-    renderInstructionSlides();
-  });
-  byId("slideNextButton").addEventListener("click", () => {
-    const slideCount = document.querySelectorAll(".instruction-slide").length;
-    currentSlide = (currentSlide + 1) % slideCount;
-    renderInstructionSlides();
-  });
+  const slidePrevButton = byId("slidePrevButton");
+  const slideNextButton = byId("slideNextButton");
+  if (slidePrevButton && slideNextButton) {
+    slidePrevButton.addEventListener("click", () => {
+      const slideCount = document.querySelectorAll(".instruction-slide").length;
+      currentSlide = (currentSlide - 1 + slideCount) % slideCount;
+      renderInstructionSlides();
+    });
+    slideNextButton.addEventListener("click", () => {
+      const slideCount = document.querySelectorAll(".instruction-slide").length;
+      currentSlide = (currentSlide + 1) % slideCount;
+      renderInstructionSlides();
+    });
+  }
   byId("resetDemoButton").addEventListener("click", () => {
     state = demoState();
     silentSave();

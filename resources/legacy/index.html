@@ -25,7 +25,7 @@
         <span>GiftFlow</span>
       </a>
       <nav class="nav" aria-label="Primary">
-        <a href="#guide">Guide</a>
+        <a href="#aiGiftBuilder">AI flow</a>
         <a href="#sequence">Sequence</a>
         <a href="/ideas.html">Ideas</a>
         <a href="#prospects">Prospects</a>
@@ -41,19 +41,19 @@
     <main class="landing-page" id="landingPage">
       <section class="landing-hero" id="landingHero">
         <div class="hero-copy">
-          <p class="launch-note">Secure campaign workspace</p>
-          <h1>GiftFlow Studio</h1>
+          <p class="launch-note">Amazon + OpenAI connected workspace</p>
+          <h1>Paste the Amazon link. Review the send.</h1>
           <p class="lede">
-            Plan Amazon gift campaigns, approve messages, organize recipients, and queue due sends from one focused workspace.
+            GiftFlow turns product URLs into reviewed gift campaigns, then keeps the Amazon queue and API details behind the workspace.
           </p>
           <div class="hero-actions">
             <button class="button button-dark" type="button" data-start-signin>Get started</button>
             <a class="button button-light" href="#landingHow">View workflow</a>
           </div>
           <div class="landing-proof-row" aria-label="GiftFlow workflow highlights">
-            <span>Plan gifts</span>
-            <span>Approve messages</span>
-            <span>Queue sends</span>
+            <span>AI gift details</span>
+            <span>Approved Amazon queue</span>
+            <span>No API training</span>
           </div>
         </div>
       </section>
@@ -61,29 +61,29 @@
       <section class="section intro-steps" id="landingHow" aria-label="How GiftFlow works">
         <div>
           <p class="eyebrow">Workflow</p>
-          <h2>Everything needed before a gift campaign goes live.</h2>
-          <p class="section-copy">Move from campaign setup to reviewed gift choices and ready recipients without tracking the work across spreadsheets and messages.</p>
+          <h2>The daily flow starts with one Amazon URL.</h2>
+          <p class="section-copy">OpenAI fills the draft details, Amazon stays connected in the background, and the team only approves what is ready to send.</p>
         </div>
         <div class="intro-step-grid">
           <article>
             <span>01</span>
-            <strong>Build the campaign</strong>
-            <p>Name the outreach motion, choose owners, and define the outcome.</p>
+            <strong>Paste the product link</strong>
+            <p>Start with the Amazon item instead of a blank gift form.</p>
           </article>
           <article>
             <span>02</span>
-            <strong>Add prospects</strong>
-            <p>Load people and shipping addresses, then mark each recipient ready.</p>
+            <strong>Let AI draft the gift</strong>
+            <p>GiftFlow fills the ASIN, product name, message, and safe image data when available.</p>
           </article>
           <article>
             <span>03</span>
-            <strong>Approve gifts</strong>
-            <p>Add gifts, dates, Amazon URLs, and messages before locking the sequence.</p>
+            <strong>Approve recipients</strong>
+            <p>Complete shipping details and mark the right people ready.</p>
           </article>
           <article>
             <span>04</span>
-            <strong>Process due sends</strong>
-            <p>Queue the gifts that are due while avoiding accidental repeat sends.</p>
+            <strong>Queue the send</strong>
+            <p>Confirmed gifts move into the Amazon-backed queue without exposing API settings.</p>
           </article>
         </div>
       </section>
@@ -232,19 +232,19 @@
     <main id="appShell" hidden>
       <section class="hero" id="overview">
         <div class="hero-copy">
-          <p class="launch-note">Private automation studio for prospect gifting</p>
-          <h1>Send. Follow up. Book meetings. All in one place.</h1>
+          <p class="launch-note">Amazon + OpenAI connected</p>
+          <h1>Run gifting from one guided board.</h1>
           <p class="lede">
-            One workspace for prospect lists, Amazon gift choices, gift-message approvals, and deduped order queues.
+            Paste a product URL, let AI draft the gift details, approve the sequence, and queue due sends through the connected Amazon workflow.
           </p>
           <div class="hero-actions">
-            <a class="button button-dark" href="#sequence">Build sequence</a>
+            <button class="button button-dark" type="button" data-focus-ai-gift>Paste Amazon URL</button>
             <button class="button button-light" id="heroRunButton" type="button">Process today</button>
           </div>
           <div class="hero-proof" aria-label="Workflow stats">
-            <span>Review</span>
-            <span>Queue</span>
-            <span>Teams</span>
+            <span>OpenAI drafts copy</span>
+            <span>Amazon queue ready</span>
+            <span>Admin-only credentials</span>
           </div>
         </div>
 
@@ -286,67 +286,33 @@
         </aside>
       </section>
 
-      <section class="section slides-band" id="guide" aria-label="Instructional slides">
-        <div class="slides-heading">
-          <div>
-            <p class="eyebrow">Quick start</p>
-            <h2>Four simple steps before the queue runs.</h2>
-          </div>
-          <div class="slide-controls" aria-label="Slide controls">
-            <button class="icon-button" id="slidePrevButton" type="button" aria-label="Previous slide">‹</button>
-            <span id="slideCounter">1 / 4</span>
-            <button class="icon-button" id="slideNextButton" type="button" aria-label="Next slide">›</button>
-          </div>
+      <section class="section command-center" id="aiGiftBuilder" aria-label="Connected gift workflow">
+        <div class="command-copy">
+          <p class="eyebrow">Connected workflow</p>
+          <h2>Less setup. More reviewed sends.</h2>
+          <p>GiftFlow now treats Amazon and OpenAI as workspace services: regular users build campaigns, while private credentials stay out of the daily flow.</p>
         </div>
-        <div class="slides-frame">
-          <article class="instruction-slide is-active" data-slide="0">
-            <span>01</span>
-            <strong>Set the campaign.</strong>
-            <p>Name the campaign, add the owner, set the start date, and write the outcome your team is aiming for.</p>
+        <div class="connection-grid" aria-label="Connection status">
+          <article class="connection-card is-ready">
+            <span>OpenAI</span>
+            <strong id="openAiStatus">AI fill ready</strong>
+            <p>Product details and message drafts start from the Amazon URL.</p>
           </article>
-          <article class="instruction-slide" data-slide="1">
-            <span>02</span>
-            <strong>Add prospects.</strong>
-            <p>Add people one by one or paste a CSV, then mark each prospect ready once the shipping address is complete.</p>
+          <article class="connection-card is-ready">
+            <span>Amazon</span>
+            <strong id="amazonApiStatus">Queue connected</strong>
+            <p>Team members can work without seeing API keys or secrets.</p>
           </article>
-          <article class="instruction-slide" data-slide="2">
-            <span>03</span>
-            <strong>Build the gift sequence.</strong>
-            <p>Add as many gifts as the campaign needs, choose send dates, and personalize the Amazon gift message with tokens like {{firstName}}.</p>
-          </article>
-          <article class="instruction-slide" data-slide="3">
-            <span>04</span>
-            <strong>Confirm, then process.</strong>
-            <p>Confirm the sequence to lock the gifts and messages, then process due gifts when you are ready to create order records.</p>
+          <article class="connection-card">
+            <span>Review gate</span>
+            <strong id="reviewGateStatus">Sequence draft</strong>
+            <p id="workflowNextAction">Paste a gift URL, then approve the sequence.</p>
           </article>
         </div>
-        <div class="slide-dots" id="slideDots" aria-label="Go to slide"></div>
-      </section>
-
-      <section class="section reason-band" aria-label="Why this workflow exists">
-        <figure class="reason-image">
-          <img src="/giftflow-reason-photo.jpg" alt="Wrapped gift, shipping label, note cards, and campaign workflow dashboard">
-        </figure>
-        <div class="reason-copy">
-          <p class="eyebrow">Because gift campaigns should not be this manual</p>
-          <h2>Keep the personal touch. Remove the repetitive work.</h2>
-        </div>
-        <div class="reason-grid">
-          <article>
-            <span>01</span>
-            <strong>One place for every send</strong>
-            <p>Campaign setup, recipient data, gift choices, and approval status stay together.</p>
-          </article>
-          <article>
-            <span>02</span>
-            <strong>Control before automation</strong>
-            <p>Every message and gift sequence must be confirmed before the queue can run.</p>
-          </article>
-          <article>
-            <span>03</span>
-            <strong>No repeat gifts</strong>
-            <p>The processor checks recipient and step history before creating a new order record.</p>
-          </article>
+        <div class="command-actions">
+          <button class="button button-dark" type="button" data-focus-ai-gift>Paste Amazon URL</button>
+          <a class="button button-light" href="#prospects">Review prospects</a>
+          <a class="button button-light" href="#automation">Open queue</a>
         </div>
       </section>
 
@@ -414,7 +380,7 @@
             <div class="panel-heading">
               <div>
                 <p class="eyebrow"><span class="panel-step-badge">02</span> Gift sequence</p>
-                <h2>Choose the gifts and write the Amazon gift messages.</h2>
+                <h2>Paste Amazon URLs and review the AI drafts.</h2>
               </div>
               <div class="button-row">
                 <a class="button button-light" href="/ideas.html">Need ideas?</a>
@@ -425,7 +391,7 @@
             <div class="sequence-footer">
               <div>
                 <strong id="giftCountStatus">0 gifts in this sequence</strong>
-                <p>Each gift can have its own date, Amazon item, message, and follow-up copy.</p>
+                <p>Each gift starts from an Amazon product URL, then moves through review before it can be queued.</p>
               </div>
               <button class="button button-light" id="addStepFooterButton" type="button">Add another gift</button>
             </div>
@@ -461,7 +427,7 @@
             <div class="panel-heading">
               <div>
                 <p class="eyebrow"><span class="panel-step-badge">05</span> Automation</p>
-                <h2>Run the gift queue when your sequence is approved.</h2>
+                <h2>Queue approved gifts without API work for the team.</h2>
               </div>
               <div class="button-row">
                 <a class="button button-light" href="/automation.html">Open automation console</a>
@@ -559,6 +525,14 @@
           <button class="icon-button remove-step" type="button" title="Remove gift step" aria-label="Remove gift step">×</button>
         </div>
         <div class="form-grid two-col compact">
+          <label class="full-span amazon-primary-field">
+            <span>Amazon product URL</span>
+            <div class="amazon-url-row">
+              <input data-field="itemUrl" type="url" placeholder="Paste an Amazon product URL">
+              <button class="button button-light fill-amazon-details" type="button">AI fill</button>
+            </div>
+            <small class="field-hint amazon-lookup-status">Paste a product URL and GiftFlow will fill what it can.</small>
+          </label>
           <label>
             <span>Step name</span>
             <input data-field="name" type="text">
@@ -576,20 +550,12 @@
             <input data-field="asin" type="text">
           </label>
           <label class="full-span">
-            <span>Amazon URL</span>
-            <div class="amazon-url-row">
-              <input data-field="itemUrl" type="url" placeholder="https://www.amazon.com/.../dp/B000000000">
-              <button class="button button-light fill-amazon-details" type="button">Fill details</button>
-            </div>
-            <small class="field-hint amazon-lookup-status">Paste a product URL to fill ASIN, gift details, and image when a safe source is available.</small>
-          </label>
-          <label class="full-span">
             <span>Amazon product image URL</span>
             <div class="gift-image-row">
               <figure class="gift-image-preview is-empty" data-image-preview><span>No image added</span></figure>
-              <input data-field="imageUrl" type="url" placeholder="AI will fill when safe, or paste official PA-API image URL">
+              <input data-field="imageUrl" type="url" placeholder="Filled when safe, or paste official PA-API image URL">
             </div>
-            <small class="field-hint">AI may enrich the gift details from the URL. Official product photos still need approved Associates or Product Advertising API image URLs.</small>
+            <small class="field-hint">Official product photos still need approved Associates or Product Advertising API image URLs.</small>
           </label>
           <label>
             <span>Quantity</span>
@@ -628,6 +594,6 @@
       </article>
     </template>
 
-    <script src="/app.js?v=20260603-admin-amazon"></script>
+    <script src="/app.js?v=20260604-connected-flow-2"></script>
   </body>
 </html>
