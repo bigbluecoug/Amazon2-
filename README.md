@@ -76,6 +76,8 @@ $ACTIVATE_RELEASE()
 
 Forge should use PHP 8.3 or newer for Laravel 13. Composer is pinned to a PHP 8.3 platform in `composer.json` so local PHP 8.4 machines do not lock PHP 8.4-only Symfony packages that Forge cannot install. Set `APP_KEY` in Forge's environment; if it is missing, generate one locally with `php artisan key:generate --show` and paste the printed value into Forge.
 
+The frontend uses checked-in static assets. `package.json` includes a no-op build script so Forge's default `npm ci && npm run build` deployment steps can complete without adding a JavaScript build pipeline.
+
 ## Account Login Setup
 
 The app supports account creation with email and password. Accounts are stored server-side in `data/users.json`, and passwords are stored as salted hashes. The first created account is marked as an admin for editing gift ideas.

@@ -1,0 +1,8 @@
+{
+  "name": "giftflow-studio",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/no-frontend-build.mjs"
+  }
+}
