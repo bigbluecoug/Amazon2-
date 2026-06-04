@@ -73,7 +73,7 @@ $FORGE_PHP artisan route:cache
 $ACTIVATE_RELEASE()
 ```
 
-Forge should use PHP 8.3 or newer for Laravel 13. Set `APP_KEY` in Forge's environment; if it is missing, generate one locally with `php artisan key:generate --show` and paste the printed value into Forge.
+Forge should use PHP 8.3 or newer for Laravel 13. Composer is pinned to a PHP 8.3 platform in `composer.json` so local PHP 8.4 machines do not lock PHP 8.4-only Symfony packages that Forge cannot install. Set `APP_KEY` in Forge's environment; if it is missing, generate one locally with `php artisan key:generate --show` and paste the printed value into Forge.
 
 ## Account Login Setup
 
