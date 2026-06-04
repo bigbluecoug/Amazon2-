@@ -67,6 +67,7 @@ GiftFlow is a Laravel app. Set the site web directory to `/public` and keep the 
 $CREATE_RELEASE()
 cd $FORGE_RELEASE_DIRECTORY
 $FORGE_COMPOSER install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+$FORGE_PHP scripts/ensure-laravel-directories.php
 $FORGE_PHP artisan migrate --force
 $FORGE_PHP artisan config:cache
 $FORGE_PHP artisan route:cache

@@ -16,6 +16,7 @@
     },
     "scripts": {
         "post-autoload-dump": [
+            "@php scripts/ensure-laravel-directories.php",
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"
         ],
